@@ -1,0 +1,3 @@
+#!/bin/bash
+
+g++ -Iinclude -Llib/osx -lGLEW -framework OpenGL -fPIC game.cpp -shared -o build/libgame.so

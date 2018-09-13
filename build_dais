@@ -1,0 +1,7 @@
+#!/bin/bash
+
+rm -rf build/
+mkdir build
+g++ -Iinclude -Llib/osx -lGLEW -lglfw3 -framework Cocoa -framework OpenGL -framework IOKit -framework CoreVideo dais_osx.cpp -o build/dais
+source hotswap
+

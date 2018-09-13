@@ -12,10 +12,9 @@ void ArenaInit(memory_arena *Arena, void *Base, u32 Capacity) {
 }
 
 void ArenaAlign(memory_arena *Arena, u32 Align) {
-    Assert((Align & (Align-1)) == 0);
+    Assert(IsPowerOfTwo(Align));
     uptr Pos = (uptr) (Arena->Base + Arena->Pos);
-    uptr Mask = (uptr) (Align-1);
-    Pos = (Pos + Mask) & ~Mask;
+    Pos = AlignRoundUp(Pos, (uptr) Align);
     Arena->Pos = (u32)(Pos - (uptr)(Arena->Base));
 }
 

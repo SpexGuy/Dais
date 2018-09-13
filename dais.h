@@ -28,6 +28,13 @@ typedef int32_t b32;
 #define Megabytes(x) ((u64)(x) * 1024 * 1024)
 #define Kilobytes(x) ((u64)(x) * 1024)
 
+#define Assert(x) do { if (!(x)) { printf("Assert failed! on line %d of %s, '%s'\n", __LINE__, __FILE__, #x); exit(42); } } while(0)
+
+#define AlignRoundUp(x, sz) (((x) + (sz) - 1) & ~((sz) - 1))
+#define IsPowerOfTwo(x) (((x) & ((x)-1)) == 0)
+
+#define ElementCount(x) (sizeof(x) / sizeof(x[0]))
+
 #define DAIS_BAD_FILE -1L
 
 struct dais_file {
@@ -64,6 +71,11 @@ struct dais {
     dais_free_file_buffer *FreeFileBuffer;
 };
 
+struct dais_button {
+    u32 ModCount;
+    b32 Pressed;
+};
+
 struct dais_input {
     u64 SystemTimeMS;
     u64 UpTimeMS;
@@ -75,13 +87,26 @@ struct dais_input {
 
     s32 CursorX;
     s32 CursorY;
+
+    union {
+        dais_button Buttons[9];
+        struct {
+            dais_button UnassignedButton0; // mapped to E
+            dais_button UnassignedButton1; // mapped to R
+            dais_button UnassignedButton2; // mapped to T
+            dais_button UnassignedButton3; // mapped to D
+            dais_button UnassignedButton4; // mapped to F
+            dais_button UnassignedButton5; // mapped to G
+            dais_button UnassignedButton6; // mapped to C
+            dais_button UnassignedButton7; // mapped to V
+            dais_button UnassignedButton8; // mapped to B
+        };
+    };
     // TODO: keyboard and controller state
 };
 
 
 #define DAIS_UPDATE_AND_RENDER(name) void name(dais *Platform, dais_input *Input)
 typedef DAIS_UPDATE_AND_RENDER(dais_update_and_render);
-
-#define Assert(x) do { if (!(x)) { printf("Assert failed! on line %d of %s, '%s'\n", __LINE__, __FILE__, #x); exit(42); } } while(0)
 
 #endif

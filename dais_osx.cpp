@@ -139,16 +139,36 @@ void GlfwResizeCallback(GLFWwindow *window, int width, int height) {
 
 static
 void GlfwKeyCallback(GLFWwindow* window, int key, int scancode, int action, int mods) {
-    if (action != GLFW_PRESS) return;
+    if (action == GLFW_PRESS) {
+        if (key == GLFW_KEY_ESCAPE) {
+            glfwSetWindowShouldClose(window, true);
+        } else if (key == GLFW_KEY_W) {
+            static bool Wireframe = false;
+            Wireframe = !Wireframe;
+            glPolygonMode(GL_FRONT_AND_BACK, Wireframe ? GL_LINE : GL_FILL);
+        } else if (key == GLFW_KEY_P) {
+            RecordingState.Advance = 1;
+        }
+    }
 
-    if (key == GLFW_KEY_ESCAPE) {
-        glfwSetWindowShouldClose(window, true);
-    } else if (key == GLFW_KEY_W) {
-        static bool Wireframe = false;
-        Wireframe = !Wireframe;
-        glPolygonMode(GL_FRONT_AND_BACK, Wireframe ? GL_LINE : GL_FILL);
-    } else if (key == GLFW_KEY_P) {
-        RecordingState.Advance = 1;
+    int Keys[] = {
+        GLFW_KEY_E,
+        GLFW_KEY_R,
+        GLFW_KEY_T,
+        GLFW_KEY_D,
+        GLFW_KEY_F,
+        GLFW_KEY_G,
+        GLFW_KEY_C,
+        GLFW_KEY_V,
+        GLFW_KEY_B
+    };
+
+    for (u32 c = 0; c < ElementCount(Keys); c++) {
+        if (Keys[c] == key) {
+            FrameInput.Buttons[c].ModCount++;
+            FrameInput.Buttons[c].Pressed = (action != GLFW_RELEASE);
+            break;
+        }
     }
 }
 

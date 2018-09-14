@@ -89,6 +89,15 @@ struct dais_input {
     s32 CursorY;
 
     union {
+        dais_button MouseButtons[3];
+        struct {
+            dais_button LeftMouseButton;
+            dais_button RightMouseButton;
+            dais_button MiddleMouseButton;
+        };
+    };
+
+    union {
         dais_button Buttons[9];
         struct {
             dais_button UnassignedButton0; // mapped to E

@@ -129,6 +129,7 @@ u64 OSXNanoClock() {
 // ----------------- Input ----------------
 
 dais_input FrameInput;
+dais_input PlaybackInput;
 
 static
 void GlfwResizeCallback(GLFWwindow *window, int width, int height) {
@@ -182,8 +183,10 @@ void GlfwCursorPosCallback(GLFWwindow *window, double xPos, double yPos) {
 
 static
 void GlfwClickCallback(GLFWwindow *window, int button, int action, int mods) {
-    // TODO
-    // mouse clicks
+    if (button < ElementCount(FrameInput.MouseButtons)) {
+        FrameInput.MouseButtons[button].ModCount++;
+        FrameInput.MouseButtons[button].Pressed = (action == GLFW_PRESS);
+    }
 }
 
 static
@@ -288,7 +291,9 @@ void StopPlayback() {
 }
 
 static inline
-void PreProcessInput() {
+dais_input *PreProcessInput() {
+    dais_input *InputToUse = &FrameInput;
+
     if (RecordingState.Advance) {
         switch (RecordingState.State) {
         case RECORD_NONE:
@@ -309,13 +314,16 @@ void PreProcessInput() {
             write(RecordingState.File, &FrameInput, sizeof(FrameInput));
             break;
         case RECORD_READ: {
-            ssize_t Res = read(RecordingState.File, &FrameInput, sizeof(FrameInput));
+            ssize_t Res = read(RecordingState.File, &PlaybackInput, sizeof(PlaybackInput));
             if (Res == 0) {
                 RestartPlayback();
-                read(RecordingState.File, &FrameInput, sizeof(FrameInput));
+                read(RecordingState.File, &PlaybackInput, sizeof(PlaybackInput));
             }
+            InputToUse = &PlaybackInput;
         } break;
     }
+
+    return InputToUse;
 }
 
 int main(int argc, char **argv) {
@@ -396,9 +404,9 @@ int main(int argc, char **argv) {
 
         glfwPollEvents(); // this will call our callbacks and fill in FrameInput.
 
-        PreProcessInput();
+        dais_input *InputToUse = PreProcessInput();
 
-        Target.UpdateAndRender(&Platform, &FrameInput);
+        Target.UpdateAndRender(&Platform, InputToUse);
 
         glfwSwapBuffers(Window);
 

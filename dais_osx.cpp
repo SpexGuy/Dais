@@ -151,23 +151,25 @@ void GlfwKeyCallback(GLFWwindow* window, int key, int scancode, int action, int 
         }
     }
 
-    int Keys[] = {
-        GLFW_KEY_E,
-        GLFW_KEY_R,
-        GLFW_KEY_T,
-        GLFW_KEY_D,
-        GLFW_KEY_F,
-        GLFW_KEY_G,
-        GLFW_KEY_C,
-        GLFW_KEY_V,
-        GLFW_KEY_B
-    };
+    if (action != GLFW_REPEAT) {
+        int Keys[] = {
+            GLFW_KEY_E,
+            GLFW_KEY_R,
+            GLFW_KEY_T,
+            GLFW_KEY_D,
+            GLFW_KEY_F,
+            GLFW_KEY_G,
+            GLFW_KEY_C,
+            GLFW_KEY_V,
+            GLFW_KEY_B
+        };
 
-    for (u32 c = 0; c < ElementCount(Keys); c++) {
-        if (Keys[c] == key) {
-            FrameInput.Buttons[c].ModCount++;
-            FrameInput.Buttons[c].Pressed = (action != GLFW_RELEASE);
-            break;
+        for (u32 c = 0; c < ElementCount(Keys); c++) {
+            if (Keys[c] == key) {
+                FrameInput.Buttons[c].ModCount++;
+                FrameInput.Buttons[c].Pressed = (action != GLFW_RELEASE);
+                break;
+            }
         }
     }
 }

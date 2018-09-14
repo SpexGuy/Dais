@@ -33,13 +33,18 @@ DAIS_UPDATE_AND_RENDER(GameUpdate) {
         State->LastPrintTime = Input->SystemTimeMS;
         ArenaInit(&State->TempArena, Platform->Memory + (Platform->MemorySize - TEMP_MEM_SIZE), TEMP_MEM_SIZE);
         ArenaInit(&State->GameArena, Platform->Memory + GAME_OFFSET, Platform->MemorySize - TEMP_MEM_SIZE - 2*GAME_OFFSET);
+        State->RedValue = 1.0f;
         Platform->Initialized = true;
     }
 
-    State->RedValue += Input->FrameDeltaSec * 0.25f;
-    if (State->RedValue > 1.0f) {
-        State->RedValue -= 1.0f;
+    if (Input->UnassignedButton0.Pressed) {
+        State->RedValue += 1.5f * Input->FrameDeltaSec;
     }
+    if (Input->UnassignedButton3.Pressed) {
+        State->RedValue -= 1.5f * Input->FrameDeltaSec;
+    }
+    if (State->RedValue < 0) State->RedValue = 0;
+    if (State->RedValue > 1) State->RedValue = 1;
 
     f32 g = (f32) Input->CursorX / Input->WindowWidth;
     f32 b = (f32) Input->CursorY / Input->WindowHeight;
@@ -53,7 +58,7 @@ DAIS_UPDATE_AND_RENDER(GameUpdate) {
     point *Point = State->Points + WriteIndex;
     Point->X = Input->CursorX * 2;
     Point->Y = (Input->WindowHeight - Input->CursorY) * 2;
-    Point->R = 1.0f;
+    Point->R = State->RedValue;
     Point->G = g;
     Point->B = b;
 

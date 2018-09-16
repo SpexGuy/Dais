@@ -2,6 +2,25 @@
 
 rm -rf build/
 mkdir build
-g++ -Iinclude -Llib/osx -lGLEW -lglfw3 -framework Cocoa -framework OpenGL -framework IOKit -framework CoreVideo dais_osx.cpp -o build/dais
+
+if [ ! -f bin/osx/libimgui.so ]; then
+    source build_imgui
+fi
+
+cp bin/osx/libimgui.so build/
+
+g++ -Iinclude \
+    -Lbuild/ -limgui \
+    -Llib/osx -lGLEW -lglfw3 \
+    -framework Cocoa \
+    -framework OpenGL \
+    -framework IOKit \
+    -framework CoreVideo \
+    -DIMGUI_IMPL_OPENGL_LOADER_GLEW \
+    dais_osx.cpp \
+    imgui/imgui_impl_opengl3.cpp \
+    imgui/imgui_impl_glfw.cpp \
+    -o build/dais
+
 source hotswap
 

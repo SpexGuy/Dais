@@ -18,6 +18,11 @@
 #include <GL/glew.h>
 #include <GLFW/glfw3.h>
 
+#include "imgui/imgui.h"
+#include "imgui/imgui_impl_glfw.h"
+#include "imgui/imgui_impl_opengl3.h"
+
+
 // ---------------- Compile-time Config ----------------
 
 #ifndef DAIS_BASE_ADDRESS
@@ -326,6 +331,16 @@ dais_input *PreProcessInput() {
     return InputToUse;
 }
 
+void StartImguiFrame(dais_input *Input) {
+    // Start the Dear ImGui frame
+    ImGui_ImplOpenGL3_NewFrame();
+    ImGui_ImplGlfw_NewFrame();
+    ImGui::NewFrame();
+
+    // TODO: copy input into imgui io
+    ImGuiIO &io = ImGui::GetIO();
+}
+
 int main(int argc, char **argv) {
     if (!glfwInit()) {
         printf("FATAL: Could not initialize GLFW\n");
@@ -334,10 +349,26 @@ int main(int argc, char **argv) {
 
     glfwSetErrorCallback(GlfwErrorCallback);
 
-    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
+#if __APPLE__
+    // GL 3.2 + GLSL 150
+    const char* glsl_version = "#version 150";
+    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
+    glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 2);
+    glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);  // 3.2+ only
+    glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);            // Required on Mac
+#else
+    // GL 3.0 + GLSL 130
+    const char* glsl_version = "#version 130";
+    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 0);
-    glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);
-    glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
+    //glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);  // 3.2+ only
+    //glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);            // 3.0+ only
+#endif
+
+    // glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
+    // glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 0);
+    // glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);
+    // glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
     Window = glfwCreateWindow(640, 480, "Dais Window", NULL, NULL);
     if (!Window) {
         printf("FATAL: Could not create window.\n");
@@ -360,6 +391,19 @@ int main(int argc, char **argv) {
     glfwSwapInterval(1);
 
     mach_timebase_info(&Timebase);
+
+    // Setup Dear ImGui binding
+    IMGUI_CHECKVERSION();
+    ImGui::CreateContext();
+    ImGuiIO& io = ImGui::GetIO(); (void)io;
+    //io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;  // Enable Keyboard Controls
+    //io.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;   // Enable Gamepad Controls
+
+    ImGui_ImplGlfw_InitForOpenGL(Window, false);
+    ImGui_ImplOpenGL3_Init(glsl_version);
+
+    // Setup style
+    ImGui::StyleColorsDark();
 
     Platform.Initialized = false;
     Platform.MemorySize = DAIS_MEM_SIZE;
@@ -406,7 +450,12 @@ int main(int argc, char **argv) {
 
         dais_input *InputToUse = PreProcessInput();
 
+        StartImguiFrame(InputToUse);
+
         Target.UpdateAndRender(&Platform, InputToUse);
+
+        ImGui::Render();
+        ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
 
         glfwSwapBuffers(Window);
 

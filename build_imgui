@@ -1,0 +1,5 @@
+#!/bin/bash
+
+g++ imgui/osx_build.cpp -fPIC -shared -o libimgui.so
+mv libimgui.so bin/osx/libimgui.so
+

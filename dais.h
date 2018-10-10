@@ -38,15 +38,16 @@ typedef int32_t b32;
 #define DAIS_BAD_FILE -1L
 
 struct dais_file {
-    s64 Size;
+    s32 Handle;
+    u32 Size;
     void *Data;
 };
 
 // Dais API typedefs
-#define DAIS_LOAD_FILE_BUFFER(name) dais_file name(const char *Path)
+#define DAIS_LOAD_FILE_BUFFER(name) dais_file name(const char *Filename)
 typedef DAIS_LOAD_FILE_BUFFER(dais_load_file_buffer);
 
-#define DAIS_FREE_FILE_BUFFER(name) void name(dais_file File)
+#define DAIS_FREE_FILE_BUFFER(name) void name(s32 Handle)
 typedef DAIS_FREE_FILE_BUFFER(dais_free_file_buffer);
 
 #define DAIS_VOID_FN(name) void name(void)
@@ -66,9 +67,18 @@ struct dais {
      *  its size will be a negative error code. */
     dais_load_file_buffer *LoadFileBuffer;
 
+    /** Maps file's contents into memory.
+     *  If the file could not be loaded,
+     *  its handle will be a negative error code. */
+    dais_load_file_buffer *MapReadOnlyFile;
+
     /** Frees a file buffer allocated in LoadFileBuffer.
      *  Only needs to be called if LoadFileBuffer succeeded. */
     dais_free_file_buffer *FreeFileBuffer;
+
+    /** Frees a file buffer allocated in MapReadOnlyFile.
+     *  Only needs to be called if MapReadOnlyFile succeeded. */
+    dais_free_file_buffer *UnmapReadOnlyFile;
 };
 
 struct dais_button {

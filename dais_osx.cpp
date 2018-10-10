@@ -73,6 +73,25 @@ GLFWwindow *Window;
 
 // ----------------- Files ----------------
 
+struct mapped_file {
+    mapped_file *Next;
+    s32 Handle;
+    s32 NativeHandle;
+    u32 MappedSize;
+    void *MappedData;
+};
+
+struct file_state {
+    u32 NextHandle;
+    mapped_file *MappedFiles;
+} FileState;
+
+static inline
+void PrintErrno() {
+    int Err = errno;
+    printf("  errno=%d (%s)\n", Err, strerror(Err));
+}
+
 static
 u64 GetLastModifiedTime(const char *Filename) {
     u64 LastWrite = 0;
@@ -85,16 +104,88 @@ u64 GetLastModifiedTime(const char *Filename) {
 
 static
 DAIS_LOAD_FILE_BUFFER(OSXLoadFileBuffer) {
-    dais_file file = {};
+    dais_file File = {};
 
-    file.Size = DAIS_BAD_FILE;
+    File.Handle = DAIS_BAD_FILE;
 
-    return file;
+    return File;
 }
 
 static
 DAIS_FREE_FILE_BUFFER(OSXFreeFileBuffer) {
 
+}
+
+static
+DAIS_LOAD_FILE_BUFFER(OSXMapReadOnlyFile) {
+    dais_file File = {};
+
+    File.Handle = DAIS_BAD_FILE;
+
+    int NativeHandle = open(Filename, O_RDONLY);
+    if (NativeHandle == -1) {
+        printf("Couldn't open %s\n", Filename);
+        PrintErrno();
+    } else {
+        struct stat Stats = {};
+        if (fstat(NativeHandle, &Stats) == -1) {
+            printf("Couldn't stat %s\n", Filename);
+            PrintErrno();
+            close(NativeHandle);
+        } else {
+            File.Size = Stats.st_size;
+            void* MappedData = mmap(
+                0, // address
+                File.Size, // length
+                PROT_READ, // protection flags
+                MAP_PRIVATE|MAP_FILE, // map flags
+                NativeHandle, // file descriptor
+                0); // offset
+
+            if (MappedData == MAP_FAILED) {
+                printf("Couldn't mmap %u bytes for %s\n", File.Size, Filename);
+                PrintErrno();
+                close(NativeHandle);
+            } else {
+                File.Data = MappedData;
+                File.Handle = ++FileState.NextHandle;
+
+                // record metadata so we can unmap the region later
+                mapped_file *FileMeta = (mapped_file *) calloc(sizeof(mapped_file), 1);
+                Assert(FileMeta);
+                FileMeta->Handle = File.Handle;
+                FileMeta->NativeHandle = NativeHandle;
+                FileMeta->MappedSize = File.Size;
+                FileMeta->MappedData = MappedData;
+                FileMeta->Next = FileState.MappedFiles;
+                FileState.MappedFiles = FileMeta;
+            }
+        }
+    }
+
+    return File;
+}
+
+DAIS_FREE_FILE_BUFFER(OSXUnmapReadOnlyFile) {
+    // find the file metadata
+    mapped_file **Curr = &FileState.MappedFiles;
+    while (*Curr) {
+        if ((*Curr)->Handle == Handle) break;
+        Curr = &((*Curr)->Next);
+    }
+    
+    if (*Curr) {
+        // unlink the metadata
+        mapped_file *FileMeta = *Curr;
+        *Curr = FileMeta->Next;
+
+        // unmap the memory
+        munmap(FileMeta->MappedData, FileMeta->MappedSize);
+        close(FileMeta->NativeHandle);
+
+        // free the metadata
+        free(FileMeta);
+    }
 }
 
 
@@ -235,12 +326,6 @@ void UpdateTarget(target_dylib *Target) {
     } else {
         printf("INFO: Updating Game Code\n");
     }
-}
-
-static inline
-void PrintErrno() {
-    int Err = errno;
-    printf("  errno=%d (%s)\n", Err, strerror(Err));
 }
 
 static inline
@@ -422,6 +507,8 @@ int main(int argc, char **argv) {
 
     Platform.LoadFileBuffer = OSXLoadFileBuffer;
     Platform.FreeFileBuffer = OSXFreeFileBuffer;
+    Platform.MapReadOnlyFile = OSXMapReadOnlyFile;
+    Platform.UnmapReadOnlyFile = OSXUnmapReadOnlyFile;
 
     Platform.ContinueRunning = true;
 

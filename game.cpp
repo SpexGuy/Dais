@@ -2,8 +2,10 @@
 
 #include <GL/glew.h>
 #include <stdio.h>
+#include <string.h>
 
 #include "arena.cpp"
+#include "animation.cpp"
 
 struct point {
     u32 X;
@@ -19,6 +21,10 @@ struct state {
     u32 TempArenaMaxSize;
     memory_arena TempArena;
     memory_arena GameArena;
+    dais_file SkeletonFile;
+    skinned_mesh *SkinnedMesh;
+
+
     u32 NumPoints;
     point Points[0];
 };
@@ -35,6 +41,15 @@ DAIS_UPDATE_AND_RENDER(GameUpdate) {
         ArenaInit(&State->GameArena, Platform->Memory + GAME_OFFSET, Platform->MemorySize - TEMP_MEM_SIZE - 2*GAME_OFFSET);
         State->RedValue = 1.0f;
         Platform->Initialized = true;
+
+        State->SkeletonFile = Platform->MapReadOnlyFile("../DefaultAvatar.skm");
+        if (State->SkeletonFile.Handle == DAIS_BAD_FILE) {
+            printf("Failed to load default avatar.\n");
+            exit(-1);
+        } else {
+            printf("Loaded default avatar, %u bytes at %p.\n", State->SkeletonFile.Size, State->SkeletonFile.Data);
+            State->SkinnedMesh = LoadMeshData(&State->GameArena, State->SkeletonFile.Data);
+        }
     }
 
     if (Input->UnassignedButton0.Pressed) {

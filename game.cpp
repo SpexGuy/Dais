@@ -1,9 +1,13 @@
 #include "dais.h"
+#include "dais_render.h"
 
+#define _USE_MATH_DEFINES
+#include <math.h>
 #include <stdio.h>
 #include <string.h>
 
-#include <glad/glad.h>
+#include <glm/gtc/matrix_transform.hpp>
+#include <glm/gtx/rotate_vector.hpp>
 
 #include "arena.cpp"
 #include "animation.cpp"
@@ -25,9 +29,8 @@ struct state {
     dais_file SkeletonFile;
     skinned_mesh *SkinnedMesh;
 
-
-    u32 NumPoints;
-    point Points[0];
+    // use a pointer so we can hotswap a size change
+    shader_state *ShaderState;
 };
 
 #define TEMP_MEM_SIZE 4096*16
@@ -55,6 +58,10 @@ DAIS_UPDATE_AND_RENDER(GameUpdate) {
         }
     }
 
+    if (Platform->JustReloaded) {
+        State->ShaderState = InitShaders(&State->GameArena);
+    }
+
     if (Input->UnassignedButton0.Pressed) {
         State->RedValue += 1.5f * Input->FrameDeltaSec;
     }
@@ -67,27 +74,33 @@ DAIS_UPDATE_AND_RENDER(GameUpdate) {
     f32 g = (f32) Input->CursorX / Input->WindowWidth;
     f32 b = (f32) Input->CursorY / Input->WindowHeight;
     glClearColor(0.0f, g, b, 1.0f);
-    glClear(GL_COLOR_BUFFER_BIT);
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+    glEnable(GL_DEPTH_TEST);
+    glDisable(GL_CULL_FACE);
 
-    u32 NumPoints = State->NumPoints++;
-    u32 WriteIndex = NumPoints & 511;
-    if (NumPoints & ~511) NumPoints = 512;
+    float aspect = (float) Input->WindowWidth / Input->WindowHeight;
+    float zoom = 100;
+    glm::mat4 Projection = glm::ortho(
+        -zoom * aspect, zoom * aspect, // left, right
+        0.0f, zoom * 2, // bottom, top
+        -100.0f * zoom, 100.0f * zoom // near, far
+    );
 
-    point *Point = State->Points + WriteIndex;
-    Point->X = Input->CursorX * 2;
-    Point->Y = (Input->WindowHeight - Input->CursorY) * 2;
-    Point->R = State->RedValue;
-    Point->G = g;
-    Point->B = b;
+    float Yaw = (g - 0.5f) * 360;
+    float Pitch = (b - 0.5f) * 180;
+    glm::vec3 LookDirection = glm::vec3(0, 0, 1);
+    LookDirection = glm::rotateX(LookDirection, Pitch);
+    LookDirection = glm::rotateY(LookDirection, Yaw);
 
-    glEnable(GL_SCISSOR_TEST);
-    for (u32 c = 0; c < NumPoints; c++) {
-        point *P = State->Points + c;
-        glScissor(P->X, P->Y, 10, 10);
-        glClearColor(P->R, P->G, P->B, 1.0f);
-        glClear(GL_COLOR_BUFFER_BIT);
-    }
-    glDisable(GL_SCISSOR_TEST);
+    glm::mat4 Rotation = glm::lookAt(
+        glm::vec3(0.0f),
+        LookDirection,
+        glm::vec3(0.0f, 1.0f, 0.0f)
+    );
+
+    glm::mat4 Combined = Projection * Rotation;
+
+    RenderSkinnedMesh(State->ShaderState, State->SkinnedMesh, Combined);
 
     if (State->TempArena.Pos > State->TempArenaMaxSize) {
         State->TempArenaMaxSize = State->TempArena.Pos;

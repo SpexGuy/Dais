@@ -525,7 +525,7 @@ int main(int argc, char **argv) {
     Platform.ContinueRunning = true;
 
     target_dylib Target = {};
-    UpdateTarget(&Target);
+    Target.LastModified = 1;
 
     u64 GameStartTime = OSXMilliTime();
     u64 LastFrameTime = GameStartTime;
@@ -536,6 +536,9 @@ int main(int argc, char **argv) {
         u64 DylibLastModified = GetLastModifiedTime(DAIS_TARGET_STR);
         if (DylibLastModified != 0 && DylibLastModified != Target.LastModified) {
             UpdateTarget(&Target);
+            Platform.JustReloaded = true;
+        } else {
+            Platform.JustReloaded = false;
         }
 
         u64 FrameTime = OSXMilliTime();

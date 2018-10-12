@@ -33,9 +33,77 @@ void UploadMeshesToOGL(skinned_mesh *Mesh) {
             AttribPos++;
             FloatPos += 2;
         }
+        CheckGLError();
     }
 }
 
+const char *DefaultVertexShader = GLSL(
+    layout(location=0) in vec3 Position;
+    layout(location=1) in vec3 Normal;
+    layout(location=2) in vec2 UV;
+
+    uniform mat4 Projection;
+
+    out vec2 InterpUV;
+
+    void main() {
+        gl_Position = Projection * vec4(Position, 1.0);
+        InterpUV = UV;
+    }
+);
+
+const char *DefaultFragmentShader = GLSL(
+    in vec2 InterpUV;
+
+    out vec4 Color;
+
+    void main() {
+        Color = vec4(InterpUV, 0.0, 1.0);
+    }
+);
+
+struct shader_state {
+    u32 ProgramID;
+    u32 Projection;
+};
+
+static
+shader_state *InitShaders(memory_arena *Arena) {
+    shader_state *State = ArenaAllocT(Arena, shader_state);
+    State->ProgramID = CompileShader(DefaultVertexShader, DefaultFragmentShader);
+    State->Projection = glGetUniformLocation(State->ProgramID, "Projection");
+    CheckGLError();
+    return State;
+}
+
+static
+void RenderSkinnedMesh(shader_state *Shaders, skinned_mesh *Mesh, glm::mat4 &Projection) {
+    glUseProgram(Shaders->ProgramID);
+    glUniformMatrix4fv(Shaders->Projection, 1, GL_FALSE, &Projection[0][0]);
+    for (u32 DrawIndex = 0; DrawIndex < Mesh->DrawCount; DrawIndex++) {
+        skinned_mesh_draw *Draw = Mesh->Draws + DrawIndex;
+        Assert(Draw->MaterialID > 0);
+        Assert(Draw->MaterialID <= Mesh->MaterialCount);
+        Assert(Draw->MeshID < Mesh->MeshCount);
+        material *Material = Mesh->Materials + Draw->MaterialID-1;
+        skinned_mesh_mesh *MeshData = Mesh->Meshes + Draw->MeshID;
+        glBindVertexArray(MeshData->VaoID);
+        glDrawElements(GL_TRIANGLES, Draw->MeshLength, GL_UNSIGNED_SHORT, (void *)(Draw->MeshOffset * sizeof(u16)));
+
+        // if (Material->DiffuseTexID != 0) {
+        //     texture *DiffuseTex = Mesh->Textures + Material->DiffuseTexID-1;
+        //     glActiveTexture(GL_TEXTURE_0);
+        //     glBindTexture(GL_TEXTURE_2D, DiffuseTex->GLTexID);
+        // }
+
+        // if (Material->NormalTexID != 0) {
+        //     texture *NormalTex = Mesh->Textures + Material->NormalTexID-1;
+        //     glActiveTexture(GL_TEXTURE_0);
+        //     glBindTexture(GL_TEXTURE_2D, NormalTex->GLTexID);
+        // }
+
+    }
+}
 
 static
 skinned_mesh *LoadMeshData(memory_arena *Arena, void *FileData) {

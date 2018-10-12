@@ -59,6 +59,8 @@ struct dais {
     /** When this is set to false, dais will terminate. */
     b32 ContinueRunning;
 
+    b32 JustReloaded;
+
     u64 MemorySize;
     char *Memory;
 
@@ -123,7 +125,6 @@ struct dais_input {
     };
     // TODO: keyboard and controller state
 };
-
 
 #define DAIS_UPDATE_AND_RENDER(name) void name(dais *Platform, dais_input *Input)
 typedef DAIS_UPDATE_AND_RENDER(dais_update_and_render);

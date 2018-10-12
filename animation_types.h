@@ -83,6 +83,7 @@ struct skinned_mesh_draw {
 
 struct texture {
     char *TexturePath;
+    u32 GLTexID;
 };
 
 // this struct is compared with memcmp, so it's important that

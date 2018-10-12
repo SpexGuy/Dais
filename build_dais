@@ -11,15 +11,16 @@ cp bin/osx/libimgui.so build/
 
 g++ -Iinclude \
     -Lbuild/ -limgui \
-    -Llib/osx -lGLEW -lglfw3 \
+    -Llib/osx -lglfw3 \
     -framework Cocoa \
     -framework OpenGL \
     -framework IOKit \
     -framework CoreVideo \
-    -DIMGUI_IMPL_OPENGL_LOADER_GLEW \
+    -DIMGUI_IMPL_OPENGL_LOADER_GLAD \
     dais_osx.cpp \
     imgui/imgui_impl_opengl3.cpp \
     imgui/imgui_impl_glfw.cpp \
+    include/glad/glad.c \
     -o build/dais
 
 source hotswap

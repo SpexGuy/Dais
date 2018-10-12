@@ -1,3 +1,12 @@
 #!/bin/bash
 
-g++ -Iinclude -Llib/osx -Lbin/osx -limgui -lGLEW -framework OpenGL -fPIC game.cpp -shared -o build/libgame.so
+g++ -Iinclude \
+    -Llib/osx \
+    -Lbin/osx \
+    -limgui \
+    -framework OpenGL \
+    -fPIC \
+    game.cpp \
+    include/glad/glad.c \
+    -shared \
+    -o build/libgame.so

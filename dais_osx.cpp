@@ -15,7 +15,7 @@
 #include <unistd.h>
 #include <fcntl.h>
 
-#include <GL/glew.h>
+#include <glad/glad.h>
 #include <GLFW/glfw3.h>
 
 #include "imgui/imgui.h"
@@ -294,6 +294,8 @@ void GlfwErrorCallback(int error, const char* description) {
 
 // ----------------- Main ----------------
 
+typedef int glad_loader_init(GLADloadproc LoadProc);
+
 struct target_dylib {
     u64 LastModified;
     void *Handle;
@@ -318,6 +320,15 @@ void UpdateTarget(target_dylib *Target) {
     if (Target->Handle) {
         Target->UpdateAndRender = (dais_update_and_render *)
                 dlsym(Target->Handle, DAIS_UPDATE_FUNC_STR);
+        glad_loader_init *GladInit = (glad_loader_init *)
+                dlsym(Target->Handle, "gladLoadGLLoader");
+        if (GladInit) {
+            if (!GladInit((GLADloadproc) glfwGetProcAddress)) {
+                printf("WARNING: Couldn't init GLAD loader in new dll\n");
+            }
+        } else {
+            printf("WARNING: GLAD loader not found in new dll\n");
+        }
     }
 
     if (!Target->UpdateAndRender) {
@@ -467,10 +478,11 @@ int main(int argc, char **argv) {
 
     glfwMakeContextCurrent(Window);
 
-    // If the program is crashing at glGenVertexArrays, try uncommenting this line.
-    //glewExperimental = GL_TRUE;
-    glewInit();
-
+    if(!gladLoadGLLoader((GLADloadproc) glfwGetProcAddress)) {
+        printf("Couldn't initialize GLAD!\n");
+        exit(-1);
+    }
+    printf("OpenGL %d.%d\n", GLVersion.major, GLVersion.minor);
     printf("OpenGL version recieved: %s\n", glGetString(GL_VERSION));
 
     glfwSwapInterval(1);

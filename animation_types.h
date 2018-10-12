@@ -67,6 +67,8 @@ struct skinned_mesh_mesh {
     u16 IndexCount; // may be zero
     f32 *VertexData;
     u16 *IndexData;
+    u32 VaoID;
+    u32 BufferIDs[2];
 };
 
 struct skinned_mesh_draw {

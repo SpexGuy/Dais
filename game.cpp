@@ -1,8 +1,9 @@
 #include "dais.h"
 
-#include <GL/glew.h>
 #include <stdio.h>
 #include <string.h>
+
+#include <glad/glad.h>
 
 #include "arena.cpp"
 #include "animation.cpp"
@@ -49,6 +50,8 @@ DAIS_UPDATE_AND_RENDER(GameUpdate) {
         } else {
             printf("Loaded default avatar, %u bytes at %p.\n", State->SkeletonFile.Size, State->SkeletonFile.Data);
             State->SkinnedMesh = LoadMeshData(&State->GameArena, State->SkeletonFile.Data);
+            UploadMeshesToOGL(State->SkinnedMesh);
+
         }
     }
 

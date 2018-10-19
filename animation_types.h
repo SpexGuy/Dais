@@ -62,9 +62,9 @@ struct skeleton {
 
 struct skinned_mesh_mesh {
     u16 VertexCount;
+    u16 IndexCount; // may be zero
     u16 VertexSize;
     u16 BoneCount;
-    u16 IndexCount; // may be zero
     f32 *VertexData;
     u16 *IndexData;
     u32 VaoID;

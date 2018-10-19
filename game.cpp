@@ -6,6 +6,11 @@
 #include <stdio.h>
 #include <string.h>
 
+#define STB_IMAGE_IMPLEMENTATION
+#define STBI_ONLY_PNG
+#include <stb/stb_image.h>
+
+
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtx/rotate_vector.hpp>
 
@@ -28,13 +33,14 @@ struct state {
     memory_arena GameArena;
     dais_file SkeletonFile;
     skinned_mesh *SkinnedMesh;
+    normal_mesh *Normals;
 
     // use a pointer so we can hotswap a size change
     shader_state *ShaderState;
 };
 
-#define TEMP_MEM_SIZE 4096*16
-#define GAME_OFFSET 4096
+#define TEMP_MEM_SIZE Megabytes(2)
+#define GAME_OFFSET Kilobytes(4)
 
 extern "C"
 DAIS_UPDATE_AND_RENDER(GameUpdate) {
@@ -46,7 +52,7 @@ DAIS_UPDATE_AND_RENDER(GameUpdate) {
         State->RedValue = 1.0f;
         Platform->Initialized = true;
 
-        State->SkeletonFile = Platform->MapReadOnlyFile("../DefaultAvatar.skm");
+        State->SkeletonFile = Platform->MapReadOnlyFile("../Avatar/DefaultAvatar.skm");
         if (State->SkeletonFile.Handle == DAIS_BAD_FILE) {
             printf("Failed to load default avatar.\n");
             exit(-1);
@@ -54,7 +60,7 @@ DAIS_UPDATE_AND_RENDER(GameUpdate) {
             printf("Loaded default avatar, %u bytes at %p.\n", State->SkeletonFile.Size, State->SkeletonFile.Data);
             State->SkinnedMesh = LoadMeshData(&State->GameArena, State->SkeletonFile.Data);
             UploadMeshesToOGL(State->SkinnedMesh);
-
+            State->Normals = GenerateNormalMeshes(&State->GameArena, &State->TempArena, State->SkinnedMesh);
         }
     }
 
@@ -101,6 +107,7 @@ DAIS_UPDATE_AND_RENDER(GameUpdate) {
     glm::mat4 Combined = Projection * Rotation;
 
     RenderSkinnedMesh(State->ShaderState, State->SkinnedMesh, Combined);
+    //RenderNormals(State->ShaderState, State->Normals, State->SkinnedMesh->MeshCount, Combined);
 
     if (State->TempArena.Pos > State->TempArenaMaxSize) {
         State->TempArenaMaxSize = State->TempArena.Pos;

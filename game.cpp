@@ -13,6 +13,7 @@
 
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtx/rotate_vector.hpp>
+#include <glm/gtc/quaternion.hpp>
 
 #include "arena.cpp"
 #include "animation.cpp"
@@ -82,7 +83,7 @@ DAIS_UPDATE_AND_RENDER(GameUpdate) {
     glClearColor(0.0f, g, b, 1.0f);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
     glEnable(GL_DEPTH_TEST);
-    glDisable(GL_CULL_FACE);
+    glEnable(GL_CULL_FACE);
 
     float aspect = (float) Input->WindowWidth / Input->WindowHeight;
     float zoom = 100;
@@ -108,6 +109,8 @@ DAIS_UPDATE_AND_RENDER(GameUpdate) {
 
     RenderSkinnedMesh(State->ShaderState, State->SkinnedMesh, Combined);
     //RenderNormals(State->ShaderState, State->Normals, State->SkinnedMesh->MeshCount, Combined);
+    glDisable(GL_DEPTH_TEST);
+    RenderBones(State->ShaderState, &State->SkinnedMesh->BindPose, Combined);
 
     if (State->TempArena.Pos > State->TempArenaMaxSize) {
         State->TempArenaMaxSize = State->TempArena.Pos;

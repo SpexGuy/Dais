@@ -206,6 +206,8 @@ struct shader_state {
     u32 TexProgramID;
     u32 TexProjection;
     u32 TexDiffuseTexture;
+    u32 TmpVertexBuffer;
+    u32 TmpVao;
 };
 
 static
@@ -218,6 +220,8 @@ shader_state *InitShaders(memory_arena *Arena) {
     State->TexProgramID = CompileShader(TexVertexShader, TexFragmentShader);
     State->TexProjection = glGetUniformLocation(State->TexProgramID, "Projection");
     State->TexDiffuseTexture = glGetUniformLocation(State->TexProgramID, "DiffuseTexture");
+    glGenBuffers(1, &State->TmpVertexBuffer);
+    glGenVertexArrays(1, &State->TmpVao);
     CheckGLError();
     return State;
 }
@@ -231,6 +235,44 @@ void RenderNormals(shader_state *Shaders, normal_mesh *Meshes, u32 NorCount, glm
         glBindVertexArray(Draw->VaoID);
         glDrawArrays(GL_LINES, 0, Draw->Count * 2);
     }
+    CheckGLError();
+}
+
+static
+void RenderBones(shader_state *Shaders, skeleton_pose *Pose, glm::mat4 &Projection) {
+    glUseProgram(Shaders->NorProgramID);
+    glUniformMatrix4fv(Shaders->NorProjection, 1, GL_FALSE, &Projection[0][0]);
+
+    glBindVertexArray(Shaders->TmpVao);
+    glBindBuffer(GL_ARRAY_BUFFER, Shaders->TmpVertexBuffer);
+    glEnableVertexAttribArray(0);
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(glm::vec3), 0);
+    CheckGLError();
+    glm::vec3 Points[2];
+    for (u32 c = 1; c < Pose->BoneCount; c++) {
+        u32 Parent = Pose->BoneParentIDs[c];
+        transform *ParentTransform = Pose->SetupPose + Parent;
+        transform *CurrentTransform = Pose->SetupPose + c;
+        vec3 ParentPos = ParentTransform->Translation;
+        vec3 CurrPos = ParentTransform->Rotation * CurrentTransform->Translation + ParentTransform->Translation;
+        u32 CurrID = Parent;
+        while (CurrID) {
+            CurrID = Pose->BoneParentIDs[CurrID];
+            transform *Trans = Pose->SetupPose + CurrID;
+            ParentPos = Trans->Rotation * ParentPos + Trans->Translation;
+            CurrPos = Trans->Rotation * CurrPos + Trans->Translation;
+        }
+
+
+        Points[0] = ParentPos;
+        Points[1] = CurrPos;
+        glBufferData(GL_ARRAY_BUFFER, sizeof(Points), &Points, GL_STREAM_DRAW);
+        CheckGLError();
+        glDrawArrays(GL_LINES, 0, 2);
+        CheckGLError();
+    }
+    glDisableVertexAttribArray(0);
+    glBindBuffer(GL_ARRAY_BUFFER, 0);
     CheckGLError();
 }
 
@@ -258,12 +300,6 @@ void RenderSkinnedMesh(shader_state *Shaders, skinned_mesh *Mesh, glm::mat4 &Pro
 
         glDrawElements(GL_TRIANGLES, Draw->MeshLength * 3, GL_UNSIGNED_SHORT, (void *)(Draw->MeshOffset * sizeof(u16) * 3));
 
-        // if (Material->DiffuseTexID != 0) {
-        //     texture *DiffuseTex = Mesh->Textures + Material->DiffuseTexID-1;
-        //     glActiveTexture(GL_TEXTURE_0);
-        //     glBindTexture(GL_TEXTURE_2D, DiffuseTex->GLTexID);
-        // }
-
         // if (Material->NormalTexID != 0) {
         //     texture *NormalTex = Mesh->Textures + Material->NormalTexID-1;
         //     glActiveTexture(GL_TEXTURE_0);
@@ -285,6 +321,7 @@ skinned_mesh *LoadMeshData(memory_arena *Arena, void *FileData) {
     struct {
         u32 VertexStart;
         u32 IndexStart;
+        u32 PoseStart;
     } Pointers;
     memcpy(&Pointers, FilePos, sizeof(Pointers));
     FilePos += sizeof(Pointers);
@@ -322,6 +359,23 @@ skinned_mesh *LoadMeshData(memory_arena *Arena, void *FileData) {
         FilePos++;
         Tex->TexturePath = FilePos;
         FilePos += skip;
+    }
+
+    FilePos = (char *)FileData + Pointers.PoseStart;
+    Mesh->BindPose.BoneCount = *(u16 *) FilePos;
+    FilePos += sizeof(u16);
+    Mesh->BindPose.BoneParentIDs = (u16 *) FilePos;
+    u32 Advance = (Mesh->BindPose.BoneCount | 1);
+    FilePos += Advance * sizeof(u16);
+    Mesh->BindPose.SetupPose = (transform *) FilePos;
+
+    for (u32 c = 0; c < Mesh->BindPose.BoneCount; c++) {
+        transform *BindPose = Mesh->BindPose.SetupPose + c;
+        printf("%2d (%2d): [(%f %f %f) (%f %f %f %f) (%f %f %f)]\n", c, Mesh->BindPose.BoneParentIDs[c],
+            BindPose->Translation.x, BindPose->Translation.y, BindPose->Translation.z,
+            BindPose->Rotation.x, BindPose->Rotation.y, BindPose->Rotation.z, BindPose->Rotation.w,
+            BindPose->Scale.x, BindPose->Scale.y, BindPose->Scale.z);
+
     }
 
     return Mesh;

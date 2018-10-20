@@ -8,19 +8,13 @@
 #define CHANNEL_FLAG_ROTATION (1<<1)
 #define CHANNEL_FLAG_SCALE (1<<2)
 
-
-struct v3 {
-    f32 x, y, z;
-};
-
-struct quat {
-    f32 x, y, z, w;
-};
+using glm::vec3;
+using glm::quat;
 
 struct transform {
-    v3 Translation;
+    vec3 Translation;
     quat Rotation;
-    v3 Scale;
+    vec3 Scale;
 };
 
 template <typename pt>
@@ -35,9 +29,9 @@ struct timeline {
 struct bone_animation {
     u16 BoneID;
     u16 ChannelFlags;
-    timeline<v3> Translations;
+    timeline<vec3> Translations;
     timeline<quat> Rotations;
-    timeline<v3> Scales;
+    timeline<vec3> Scales;
 };
 
 struct animation {
@@ -110,6 +104,8 @@ struct skinned_mesh {
     skinned_mesh_mesh *Meshes;
     material *Materials;
     texture *Textures;
+
+    skeleton_pose BindPose;
 };
 
 static inline

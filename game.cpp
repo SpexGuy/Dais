@@ -1,5 +1,4 @@
-#include "dais.h"
-#include "dais_render.h"
+// -------- Library Includes ---------
 
 #define _USE_MATH_DEFINES
 #include <math.h>
@@ -10,34 +9,47 @@
 #define STBI_ONLY_PNG
 #include <stb/stb_image.h>
 
-
+#include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtx/rotate_vector.hpp>
 #include <glm/gtc/quaternion.hpp>
 
+using glm::vec2;
+using glm::vec3;
+using glm::quat;
+using glm::mat4;
+
+
+// -------- Dais Includes --------
+
+#include "dais.h"
+#include "dais_render.h"
 #include "arena.cpp"
+
+
+// -------- Global Variables --------
+
+memory_arena *TempArena;
+memory_arena *PermArena;
+
+
+// -------- Source Files --------
+
 #include "animation.cpp"
 
-struct point {
-    u32 X;
-    u32 Y;
-    f32 R;
-    f32 G;
-    f32 B;
-};
-
 struct state {
-    u64 LastPrintTime;
-    f32 RedValue;
     u32 TempArenaMaxSize;
     memory_arena TempArena;
     memory_arena GameArena;
     dais_file SkeletonFile;
+
     skinned_mesh *SkinnedMesh;
     normal_mesh *Normals;
-
     // use a pointer so we can hotswap a size change
     shader_state *ShaderState;
+
+    vec2 LastCursorPos;
+    vec2 CamPos;
 };
 
 #define TEMP_MEM_SIZE Megabytes(2)
@@ -45,12 +57,15 @@ struct state {
 
 extern "C"
 DAIS_UPDATE_AND_RENDER(GameUpdate) {
+    Assert(GAME_OFFSET > sizeof(state));
+
+    // ---------- Initialization ----------
     state *State = (state *) Platform->Memory;
+    TempArena = &State->TempArena;
+    PermArena = &State->GameArena;
     if (!Platform->Initialized) {
-        State->LastPrintTime = Input->SystemTimeMS;
         ArenaInit(&State->TempArena, Platform->Memory + (Platform->MemorySize - TEMP_MEM_SIZE), TEMP_MEM_SIZE);
         ArenaInit(&State->GameArena, Platform->Memory + GAME_OFFSET, Platform->MemorySize - TEMP_MEM_SIZE - 2*GAME_OFFSET);
-        State->RedValue = 1.0f;
         Platform->Initialized = true;
 
         State->SkeletonFile = Platform->MapReadOnlyFile("../Avatar/DefaultAvatar.skm");
@@ -63,54 +78,74 @@ DAIS_UPDATE_AND_RENDER(GameUpdate) {
             UploadMeshesToOGL(State->SkinnedMesh);
             State->Normals = GenerateNormalMeshes(&State->GameArena, &State->TempArena, State->SkinnedMesh);
         }
+
+        State->LastCursorPos = vec2(
+            (f32) Input->CursorX / Input->WindowWidth,
+            (f32) Input->CursorY / Input->WindowHeight);
     }
 
     if (Platform->JustReloaded) {
         State->ShaderState = InitShaders(&State->GameArena);
     }
 
-    if (Input->UnassignedButton0.Pressed) {
-        State->RedValue += 1.5f * Input->FrameDeltaSec;
-    }
-    if (Input->UnassignedButton3.Pressed) {
-        State->RedValue -= 1.5f * Input->FrameDeltaSec;
-    }
-    if (State->RedValue < 0) State->RedValue = 0;
-    if (State->RedValue > 1) State->RedValue = 1;
 
-    f32 g = (f32) Input->CursorX / Input->WindowWidth;
-    f32 b = (f32) Input->CursorY / Input->WindowHeight;
-    glClearColor(0.0f, g, b, 1.0f);
-    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-    glEnable(GL_DEPTH_TEST);
-    glEnable(GL_CULL_FACE);
+    // ---------- Input Handling ----------
 
-    float aspect = (float) Input->WindowWidth / Input->WindowHeight;
-    float zoom = 100;
-    glm::mat4 Projection = glm::ortho(
-        -zoom * aspect, zoom * aspect, // left, right
-        0.0f, zoom * 2, // bottom, top
-        -100.0f * zoom, 100.0f * zoom // near, far
+    vec2 CursorPos = vec2((f32) Input->CursorX / Input->WindowWidth,
+                          (f32) Input->CursorY / Input->WindowHeight);
+
+    if (Input->LeftMouseButton.Pressed) {
+        State->CamPos += (CursorPos - State->LastCursorPos);
+        State->CamPos.x = glm::fract(State->CamPos.x);
+        State->CamPos.y = glm::clamp(State->CamPos.y, -0.499f, 0.499f);
+    }
+
+    State->LastCursorPos = CursorPos;
+
+
+    // -------- Prepare Matrices ---------
+
+    float Aspect = (float) Input->WindowWidth / Input->WindowHeight;
+    float HalfHeight = 100;
+    float HalfDepth = 100 * HalfHeight;
+    mat4 Projection = glm::ortho(
+        -HalfHeight * Aspect, HalfHeight * Aspect, // left, right
+        -HalfHeight, HalfHeight, // bottom, top
+        0.0f, 2*HalfDepth // near, far
     );
 
-    float Yaw = (g - 0.5f) * 360;
-    float Pitch = (b - 0.5f) * 180;
-    glm::vec3 LookDirection = glm::vec3(0, 0, 1);
+    float Yaw = -State->CamPos.x * 360;
+    float Pitch = State->CamPos.y * 180;
+    vec3 LookDirection = vec3(0, 0, 1);
     LookDirection = glm::rotateX(LookDirection, Pitch);
     LookDirection = glm::rotateY(LookDirection, Yaw);
 
-    glm::mat4 Rotation = glm::lookAt(
-        glm::vec3(0.0f),
-        LookDirection,
-        glm::vec3(0.0f, 1.0f, 0.0f)
+    vec3 LookCenter = vec3(0, HalfHeight, 0);
+    vec3 LookSource = LookCenter - LookDirection * HalfDepth;
+
+    mat4 View = glm::lookAt(
+        LookSource,
+        LookCenter,
+        vec3(0.0f, 1.0f, 0.0f)
     );
 
-    glm::mat4 Combined = Projection * Rotation;
+    mat4 Combined = Projection * View;
+
+
+    // -------- Rendering ---------
+
+    glClearColor(0.2f, 0.2f, 0.2f, 1.0f);
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+    glEnable(GL_DEPTH_TEST);
+    glEnable(GL_CULL_FACE);
 
     RenderSkinnedMesh(State->ShaderState, State->SkinnedMesh, Combined);
     //RenderNormals(State->ShaderState, State->Normals, State->SkinnedMesh->MeshCount, Combined);
     glDisable(GL_DEPTH_TEST);
     RenderBones(State->ShaderState, &State->SkinnedMesh->BindPose, Combined);
+
+
+    // ---------- Cleanup -----------
 
     if (State->TempArena.Pos > State->TempArenaMaxSize) {
         State->TempArenaMaxSize = State->TempArena.Pos;

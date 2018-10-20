@@ -52,6 +52,13 @@ char *ArenaStrcpy(memory_arena *Arena, const char *Str) {
     return (char *) ArenaCopy(Arena, Str, Len+1);
 }
 
-#define ArenaAllocT(arena, type) ((type *) ArenaAlloc(arena, sizeof(type)))
-#define ArenaAllocTN(arena, type, count) ((type *) ArenaAlloc(arena, sizeof(type) * (count)))
+#define ArenaAllocT(ARENA, TYPE) \
+    ((TYPE *) ArenaAlloc(ARENA, sizeof(TYPE)))
+#define ArenaAllocTN(ARENA, TYPE, COUNT) \
+    ((TYPE *) ArenaAlloc(ARENA, sizeof(TYPE) * (COUNT)))
+
+#define ArenaCopyT(ARENA, VALUE, TYPE) \
+    ((TYPE *) ArenaCopy(ARENA, VALUE, sizeof(TYPE)))
+#define ArenaCopyTN(ARENA, VALUE, TYPE, COUNT) \
+    ((TYPE *) ArenaCopy(ARENA, VALUE, sizeof(TYPE) * (COUNT)))
 

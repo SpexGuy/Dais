@@ -8,9 +8,6 @@
 #define CHANNEL_FLAG_ROTATION (1<<1)
 #define CHANNEL_FLAG_SCALE (1<<2)
 
-using glm::vec3;
-using glm::quat;
-
 struct transform {
     vec3 Translation;
     quat Rotation;

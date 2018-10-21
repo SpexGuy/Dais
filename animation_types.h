@@ -47,8 +47,13 @@ struct skeleton_pose {
 
 struct skeleton {
     skeleton_pose Pose;
+    mat4x3 *LocalSetupMatrices;
+    mat4x3 *WorldSetupMatrices;
+    mat4x3 *InverseSetupMatrices;
     transform *LocalTransforms;
-    transform *WorldTransforms;
+    mat4x3 *LocalOffsets;
+    mat4x3 *LocalMatrices;
+    mat4x3 *WorldMatrices;
 };
 
 struct skinned_mesh_mesh {

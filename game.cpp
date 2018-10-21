@@ -10,14 +10,18 @@
 #include <stb/stb_image.h>
 
 #include <glm/glm.hpp>
+#include <glm/gtx/transform.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtx/rotate_vector.hpp>
 #include <glm/gtc/quaternion.hpp>
 
 using glm::vec2;
 using glm::vec3;
+using glm::vec4;
 using glm::quat;
+using glm::mat3;
 using glm::mat4;
+using glm::mat4x3;
 
 
 // -------- Dais Includes --------
@@ -32,10 +36,12 @@ using glm::mat4;
 memory_arena *TempArena;
 memory_arena *PermArena;
 
-
 // -------- Source Files --------
 
+#include "strings.cpp"
+#include "animation_types.h"
 #include "animation.cpp"
+#include "render.cpp"
 
 struct state {
     u32 TempArenaMaxSize;
@@ -44,12 +50,13 @@ struct state {
     dais_file SkeletonFile;
 
     skinned_mesh *SkinnedMesh;
-    normal_mesh *Normals;
     // use a pointer so we can hotswap a size change
     shader_state *ShaderState;
 
     vec2 LastCursorPos;
     vec2 CamPos;
+
+    float Angle;
 };
 
 #define TEMP_MEM_SIZE Megabytes(2)
@@ -76,7 +83,6 @@ DAIS_UPDATE_AND_RENDER(GameUpdate) {
             printf("Loaded default avatar, %u bytes at %p.\n", State->SkeletonFile.Size, State->SkeletonFile.Data);
             State->SkinnedMesh = LoadMeshData(&State->GameArena, State->SkeletonFile.Data);
             UploadMeshesToOGL(State->SkinnedMesh);
-            State->Normals = GenerateNormalMeshes(&State->GameArena, &State->TempArena, State->SkinnedMesh);
         }
 
         State->LastCursorPos = vec2(
@@ -101,6 +107,8 @@ DAIS_UPDATE_AND_RENDER(GameUpdate) {
     }
 
     State->LastCursorPos = CursorPos;
+
+    State->Angle += Input->FrameDeltaSec * 90;
 
 
     // -------- Prepare Matrices ---------
@@ -132,6 +140,31 @@ DAIS_UPDATE_AND_RENDER(GameUpdate) {
     mat4 Combined = Projection * View;
 
 
+    skeleton Skel;
+    Skel.Pose = State->SkinnedMesh->BindPose;
+    Skel.LocalSetupMatrices = ArenaAllocTN(TempArena, mat4x3, Skel.Pose.BoneCount);
+    Skel.WorldSetupMatrices = ArenaAllocTN(TempArena, mat4x3, Skel.Pose.BoneCount);
+    Skel.InverseSetupMatrices = ArenaAllocTN(TempArena, mat4x3, Skel.Pose.BoneCount);
+    UpdateSetupMatrices(&Skel);
+
+    Skel.LocalTransforms = ArenaAllocTN(TempArena, transform, Skel.Pose.BoneCount);
+    for (u32 Index = 0; Index < Skel.Pose.BoneCount; Index++) {
+        Skel.LocalTransforms[Index] = (transform){
+            vec3(0, 0, 0),
+            quat(1, 0, 0, 0),
+            vec3(1, 1, 1)
+        };
+    }
+    Skel.LocalTransforms[33].Rotation = glm::angleAxis(
+        State->Angle,
+        glm::normalize(vec3(1,1,-1)));
+    Skel.LocalOffsets = ArenaAllocTN(TempArena, mat4x3, Skel.Pose.BoneCount);
+    Skel.LocalMatrices = ArenaAllocTN(TempArena, mat4x3, Skel.Pose.BoneCount);
+    Skel.WorldMatrices = ArenaAllocTN(TempArena, mat4x3, Skel.Pose.BoneCount);
+
+    UpdateMatricesFromTransforms(&Skel);
+
+
     // -------- Rendering ---------
 
     glClearColor(0.2f, 0.2f, 0.2f, 1.0f);
@@ -139,17 +172,26 @@ DAIS_UPDATE_AND_RENDER(GameUpdate) {
     glEnable(GL_DEPTH_TEST);
     glEnable(GL_CULL_FACE);
 
-    RenderSkinnedMesh(State->ShaderState, State->SkinnedMesh, Combined);
-    //RenderNormals(State->ShaderState, State->Normals, State->SkinnedMesh->MeshCount, Combined);
+    RenderSkinnedMesh(State->ShaderState, State->SkinnedMesh, &Skel, Combined);
     glDisable(GL_DEPTH_TEST);
-    RenderBones(State->ShaderState, &State->SkinnedMesh->BindPose, Combined);
+    RenderBones(State->ShaderState, &Skel, Combined);
 
 
     // ---------- Cleanup -----------
 
     if (State->TempArena.Pos > State->TempArenaMaxSize) {
-        State->TempArenaMaxSize = State->TempArena.Pos;
-        printf("New TempArena Max Size: %u\n", State->TempArena.Pos);
+        u32 Size = State->TempArena.Pos;
+        State->TempArenaMaxSize = Size;
+        u32 Megabytes = (Size >> 20) & 0x3FF;
+        u32 Kilobytes = (Size >> 10) & 0x3FF;
+        u32 Bytes = Size & 0x3FF;
+        if (Megabytes > 0) {
+            printf("New TempArena Max Size: %d.%04d.%04d\n", Megabytes, Kilobytes, Bytes);
+        } else if (Kilobytes > 0) {
+            printf("New TempArena Max Size: %d.%04d\n", Kilobytes, Bytes);
+        } else {
+            printf("New TempArena Max Size: %d\n", Bytes);
+        }
     }
     ArenaClear(&State->TempArena);
 }

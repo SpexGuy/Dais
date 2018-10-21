@@ -3,7 +3,9 @@
 
 #include <glad/glad.h>
 
-#define GLSL(src) "#version 400\n" #src
+#define GLSL_VERSION "#version 400\n"
+#define MULTILINE_STR(src) #src
+#define GLSL(src) GLSL_VERSION #src
 
 #define CheckGLError() CheckGLError_(__FILE__,__LINE__)
 

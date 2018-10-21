@@ -23,6 +23,8 @@ typedef double f64;
 
 typedef int32_t b32;
 
+#define restrict __restrict__
+
 #define Terabytes(x) ((u64)(x) * 1024 * 1024 * 1024 * 1024)
 #define Gigabytes(x) ((u64)(x) * 1024 * 1024 * 1024)
 #define Megabytes(x) ((u64)(x) * 1024 * 1024)

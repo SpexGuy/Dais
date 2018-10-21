@@ -155,9 +155,19 @@ DAIS_UPDATE_AND_RENDER(GameUpdate) {
             vec3(1, 1, 1)
         };
     }
+
+    Skel.LocalTransforms[32].Rotation = glm::angleAxis(
+        State->Angle,
+        glm::normalize(vec3(1,1,-1)));
     Skel.LocalTransforms[33].Rotation = glm::angleAxis(
         State->Angle,
         glm::normalize(vec3(1,1,-1)));
+    Skel.LocalTransforms[51].Rotation = glm::angleAxis(
+        State->Angle,
+        glm::normalize(vec3(1,1,1)));
+    Skel.LocalTransforms[52].Rotation = glm::angleAxis(
+        State->Angle,
+        glm::normalize(vec3(1,1,1)));
     Skel.LocalOffsets = ArenaAllocTN(TempArena, mat4x3, Skel.Pose.BoneCount);
     Skel.LocalMatrices = ArenaAllocTN(TempArena, mat4x3, Skel.Pose.BoneCount);
     Skel.WorldMatrices = ArenaAllocTN(TempArena, mat4x3, Skel.Pose.BoneCount);
@@ -174,7 +184,7 @@ DAIS_UPDATE_AND_RENDER(GameUpdate) {
 
     RenderSkinnedMesh(State->ShaderState, State->SkinnedMesh, &Skel, Combined);
     glDisable(GL_DEPTH_TEST);
-    RenderBones(State->ShaderState, &Skel, Combined);
+    //RenderBones(State->ShaderState, &Skel, Combined);
 
 
     // ---------- Cleanup -----------

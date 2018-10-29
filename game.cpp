@@ -48,15 +48,19 @@ struct state {
     memory_arena TempArena;
     memory_arena GameArena;
     dais_file SkeletonFile;
+    dais_file AnimFile;
 
     skinned_mesh *SkinnedMesh;
     // use a pointer so we can hotswap a size change
     shader_state *ShaderState;
 
+    animation *Anim;
+
     vec2 LastCursorPos;
     vec2 CamPos;
 
     float Angle;
+    float AnimTime;
 };
 
 #define TEMP_MEM_SIZE Megabytes(2)
@@ -85,6 +89,17 @@ DAIS_UPDATE_AND_RENDER(GameUpdate) {
             UploadMeshesToOGL(State->SkinnedMesh);
         }
 
+        // State->AnimFile = Platform->MapReadOnlyFile("../Avatar/Animations/Idle_JumpDownLow_BackFlip_Idle.ska");
+        // State->AnimFile = Platform->MapReadOnlyFile("../Avatar/Animations/Idle_JumpDownLow_BackFlip_Idle.ska");
+        State->AnimFile = Platform->MapReadOnlyFile("../Avatar/Animations/Run_wallPush.ska");
+        if (State->AnimFile.Handle == DAIS_BAD_FILE) {
+            printf("Failed to load animation.\n");
+            exit(-1);
+        } else {
+            printf("Loaded animation\n");
+            State->Anim = LoadAnimation(&State->GameArena, State->AnimFile.Data);
+        }
+
         State->LastCursorPos = vec2(
             (f32) Input->CursorX / Input->WindowWidth,
             (f32) Input->CursorY / Input->WindowHeight);
@@ -109,6 +124,49 @@ DAIS_UPDATE_AND_RENDER(GameUpdate) {
     State->LastCursorPos = CursorPos;
 
     State->Angle += Input->FrameDeltaSec * 90;
+    State->AnimTime += Input->FrameDeltaSec / 2;
+    State->AnimTime = glm::fract(State->AnimTime);
+
+
+    // --------- Animation ---------
+
+    skeleton Skel;
+    Skel.Pose = State->SkinnedMesh->BindPose;
+    Skel.LocalSetupMatrices = ArenaAllocTN(TempArena, mat4x3, Skel.Pose.BoneCount);
+    Skel.InverseLocalSetupMatrices = ArenaAllocTN(TempArena, mat4x3, Skel.Pose.BoneCount);
+    Skel.WorldSetupMatrices = ArenaAllocTN(TempArena, mat4x3, Skel.Pose.BoneCount);
+    Skel.InverseSetupMatrices = ArenaAllocTN(TempArena, mat4x3, Skel.Pose.BoneCount);
+    UpdateSetupMatrices(&Skel);
+
+    Skel.LocalTransforms = ArenaAllocTN(TempArena, transform, Skel.Pose.BoneCount);
+    for (u32 Index = 0; Index < Skel.Pose.BoneCount; Index++) {
+        Skel.LocalTransforms[Index] = Skel.Pose.SetupPose[Index];
+    }
+
+    SetAnimationToPercent(&Skel, State->Anim, State->AnimTime);
+
+    // Skel.LocalTransforms[32].Rotation = Skel.LocalTransforms[32].Rotation *
+    //     glm::angleAxis(
+    //         State->Angle,
+    //         glm::normalize(vec3(1,1,-1)));
+    // Skel.LocalTransforms[33].Rotation = Skel.LocalTransforms[33].Rotation *
+    //     glm::angleAxis(
+    //         State->Angle,
+    //         glm::normalize(vec3(1,1,-1)));
+    // Skel.LocalTransforms[51].Rotation = Skel.LocalTransforms[51].Rotation *
+    //     glm::angleAxis(
+    //         State->Angle,
+    //         glm::normalize(vec3(1,1,1)));
+    // Skel.LocalTransforms[52].Rotation = Skel.LocalTransforms[52].Rotation *
+    //     glm::angleAxis(
+    //         State->Angle,
+    //         glm::normalize(vec3(1,1,1)));
+    Skel.LocalOffsets = ArenaAllocTN(TempArena, mat4x3, Skel.Pose.BoneCount);
+    Skel.LocalMatrices = ArenaAllocTN(TempArena, mat4x3, Skel.Pose.BoneCount);
+    Skel.CompositeMatrices = ArenaAllocTN(TempArena, mat4x3, Skel.Pose.BoneCount);
+    Skel.WorldMatrices = ArenaAllocTN(TempArena, mat4x3, Skel.Pose.BoneCount);
+
+    UpdateMatricesFromTransforms(&Skel);
 
 
     // -------- Prepare Matrices ---------
@@ -128,7 +186,7 @@ DAIS_UPDATE_AND_RENDER(GameUpdate) {
     LookDirection = glm::rotateX(LookDirection, Pitch);
     LookDirection = glm::rotateY(LookDirection, Yaw);
 
-    vec3 LookCenter = vec3(0, HalfHeight, 0);
+    vec3 LookCenter = Skel.WorldMatrices[1][3];
     vec3 LookSource = LookCenter - LookDirection * HalfDepth;
 
     mat4 View = glm::lookAt(
@@ -140,41 +198,6 @@ DAIS_UPDATE_AND_RENDER(GameUpdate) {
     mat4 Combined = Projection * View;
 
 
-    skeleton Skel;
-    Skel.Pose = State->SkinnedMesh->BindPose;
-    Skel.LocalSetupMatrices = ArenaAllocTN(TempArena, mat4x3, Skel.Pose.BoneCount);
-    Skel.WorldSetupMatrices = ArenaAllocTN(TempArena, mat4x3, Skel.Pose.BoneCount);
-    Skel.InverseSetupMatrices = ArenaAllocTN(TempArena, mat4x3, Skel.Pose.BoneCount);
-    UpdateSetupMatrices(&Skel);
-
-    Skel.LocalTransforms = ArenaAllocTN(TempArena, transform, Skel.Pose.BoneCount);
-    for (u32 Index = 0; Index < Skel.Pose.BoneCount; Index++) {
-        Skel.LocalTransforms[Index] = (transform){
-            vec3(0, 0, 0),
-            quat(1, 0, 0, 0),
-            vec3(1, 1, 1)
-        };
-    }
-
-    Skel.LocalTransforms[32].Rotation = glm::angleAxis(
-        State->Angle,
-        glm::normalize(vec3(1,1,-1)));
-    Skel.LocalTransforms[33].Rotation = glm::angleAxis(
-        State->Angle,
-        glm::normalize(vec3(1,1,-1)));
-    Skel.LocalTransforms[51].Rotation = glm::angleAxis(
-        State->Angle,
-        glm::normalize(vec3(1,1,1)));
-    Skel.LocalTransforms[52].Rotation = glm::angleAxis(
-        State->Angle,
-        glm::normalize(vec3(1,1,1)));
-    Skel.LocalOffsets = ArenaAllocTN(TempArena, mat4x3, Skel.Pose.BoneCount);
-    Skel.LocalMatrices = ArenaAllocTN(TempArena, mat4x3, Skel.Pose.BoneCount);
-    Skel.WorldMatrices = ArenaAllocTN(TempArena, mat4x3, Skel.Pose.BoneCount);
-
-    UpdateMatricesFromTransforms(&Skel);
-
-
     // -------- Rendering ---------
 
     glClearColor(0.2f, 0.2f, 0.2f, 1.0f);
@@ -184,7 +207,7 @@ DAIS_UPDATE_AND_RENDER(GameUpdate) {
 
     RenderSkinnedMesh(State->ShaderState, State->SkinnedMesh, &Skel, Combined);
     glDisable(GL_DEPTH_TEST);
-    //RenderBones(State->ShaderState, &Skel, Combined);
+    RenderBones(State->ShaderState, &Skel, Combined);
 
 
     // ---------- Cleanup -----------

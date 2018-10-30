@@ -251,34 +251,34 @@ animation *LoadAnimation(memory_arena *Arena, void *FileData) {
         }
     }
 
-    for (u32 BoneIndex = 0; BoneIndex < Anim->AnimatedBoneCount; BoneIndex++) {
-        bone_animation *Bone = Anim->Bones + BoneIndex;
+    // for (u32 BoneIndex = 0; BoneIndex < Anim->AnimatedBoneCount; BoneIndex++) {
+    //     bone_animation *Bone = Anim->Bones + BoneIndex;
 
-        printf("Bone %d\n", Bone->BoneID);
-        for (u32 c = 0; c < Bone->Translations.KeyframeCount; c++) {
-            printf("T %f [%f %f %f]\n",
-                Bone->Translations.Percentages[c],
-                Bone->Translations.Values[c].x,
-                Bone->Translations.Values[c].y,
-                Bone->Translations.Values[c].z);
-        }
-        for (u32 c = 0; c < Bone->Rotations.KeyframeCount; c++) {
-            printf("R %f [%f %f %f %f]\n",
-                Bone->Rotations.Percentages[c],
-                Bone->Rotations.Values[c].x,
-                Bone->Rotations.Values[c].y,
-                Bone->Rotations.Values[c].z,
-                Bone->Rotations.Values[c].w);
-        }
-        for (u32 c = 0; c < Bone->Scales.KeyframeCount; c++) {
-            printf("S %f [%f %f %f]\n",
-                Bone->Scales.Percentages[c],
-                Bone->Scales.Values[c].x,
-                Bone->Scales.Values[c].y,
-                Bone->Scales.Values[c].z);
-        }
-        printf("\n");
-    }
+    //     printf("Bone %d\n", Bone->BoneID);
+    //     for (u32 c = 0; c < Bone->Translations.KeyframeCount; c++) {
+    //         printf("T %f [%f %f %f]\n",
+    //             Bone->Translations.Percentages[c],
+    //             Bone->Translations.Values[c].x,
+    //             Bone->Translations.Values[c].y,
+    //             Bone->Translations.Values[c].z);
+    //     }
+    //     for (u32 c = 0; c < Bone->Rotations.KeyframeCount; c++) {
+    //         printf("R %f [%f %f %f %f]\n",
+    //             Bone->Rotations.Percentages[c],
+    //             Bone->Rotations.Values[c].x,
+    //             Bone->Rotations.Values[c].y,
+    //             Bone->Rotations.Values[c].z,
+    //             Bone->Rotations.Values[c].w);
+    //     }
+    //     for (u32 c = 0; c < Bone->Scales.KeyframeCount; c++) {
+    //         printf("S %f [%f %f %f]\n",
+    //             Bone->Scales.Percentages[c],
+    //             Bone->Scales.Values[c].x,
+    //             Bone->Scales.Values[c].y,
+    //             Bone->Scales.Values[c].z);
+    //     }
+    //     printf("\n");
+    // }
 
     return Anim;
 }

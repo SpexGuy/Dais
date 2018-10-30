@@ -30,9 +30,12 @@ using glm::mat4x3;
 #include "dais_render.h"
 #include "arena.cpp"
 
-
 // -------- Global Variables --------
 
+struct state;
+
+dais *PlatformRef;
+state *State;
 memory_arena *TempArena;
 memory_arena *PermArena;
 
@@ -61,19 +64,45 @@ struct state {
 
     float Angle;
     float AnimTime;
+
+    u32 LastPressID;
+    u32 CurrentAnimation;
+    dais_listing AnimationsList;
 };
 
 #define TEMP_MEM_SIZE Megabytes(2)
 #define GAME_OFFSET Kilobytes(4)
+
+static
+void LoadNextAnimation() {
+    printf("Loading next animation (id %d)\n", State->CurrentAnimation);
+    char *Animation = State->AnimationsList.Names[State->CurrentAnimation];
+    char *Filename = TCat("../Avatar/Animations/", Animation);
+    if (State->AnimFile.Data) {
+        printf("Unloading old animation\n");
+        PlatformRef->UnmapReadOnlyFile(State->AnimFile.Handle);
+    }
+
+    printf("Loading %s\n", Animation);
+    State->AnimFile = PlatformRef->MapReadOnlyFile(Filename);
+    if (State->AnimFile.Handle == DAIS_BAD_FILE) {
+        printf("Failed to load animation.\n");
+        exit(-1);
+    } else {
+        State->Anim = LoadAnimation(PermArena, State->AnimFile.Data);
+        State->AnimTime = 0;
+    }
+}
 
 extern "C"
 DAIS_UPDATE_AND_RENDER(GameUpdate) {
     Assert(GAME_OFFSET > sizeof(state));
 
     // ---------- Initialization ----------
-    state *State = (state *) Platform->Memory;
+    State = (state *) Platform->Memory;
     TempArena = &State->TempArena;
     PermArena = &State->GameArena;
+    PlatformRef = Platform;
     if (!Platform->Initialized) {
         ArenaInit(&State->TempArena, Platform->Memory + (Platform->MemorySize - TEMP_MEM_SIZE), TEMP_MEM_SIZE);
         ArenaInit(&State->GameArena, Platform->Memory + GAME_OFFSET, Platform->MemorySize - TEMP_MEM_SIZE - 2*GAME_OFFSET);
@@ -89,20 +118,13 @@ DAIS_UPDATE_AND_RENDER(GameUpdate) {
             UploadMeshesToOGL(State->SkinnedMesh);
         }
 
-        State->AnimFile = Platform->MapReadOnlyFile("../Avatar/Animations/Idle_JumpDownLow_BackFlip_Idle.ska");
-        //State->AnimFile = Platform->MapReadOnlyFile("../Avatar/Animations/SmallStep.ska");
-        //State->AnimFile = Platform->MapReadOnlyFile("../Avatar/Animations/Run_wallPush.ska");
-        if (State->AnimFile.Handle == DAIS_BAD_FILE) {
-            printf("Failed to load animation.\n");
-            exit(-1);
-        } else {
-            printf("Loaded animation\n");
-            State->Anim = LoadAnimation(&State->GameArena, State->AnimFile.Data);
-        }
-
         State->LastCursorPos = vec2(
             (f32) Input->CursorX / Input->WindowWidth,
             (f32) Input->CursorY / Input->WindowHeight);
+
+        State->AnimationsList = Platform->ListDirectory("../Avatar/Animations", PermArena);
+
+        LoadNextAnimation();
     }
 
     if (Platform->JustReloaded) {
@@ -121,11 +143,21 @@ DAIS_UPDATE_AND_RENDER(GameUpdate) {
         State->CamPos.y = glm::clamp(State->CamPos.y, -0.499f, 0.499f);
     }
 
+    if (Input->UnassignedButton0.Pressed &&
+        Input->UnassignedButton0.ModCount != State->LastPressID) {
+        State->LastPressID = Input->UnassignedButton0.ModCount;
+        State->CurrentAnimation++;
+        if (State->CurrentAnimation >= State->AnimationsList.Count) {
+            State->CurrentAnimation = 0;
+        }
+        LoadNextAnimation();
+    }
+
     State->LastCursorPos = CursorPos;
 
     State->Angle += Input->FrameDeltaSec * 90;
-    State->AnimTime += Input->FrameDeltaSec / 4;
-    State->AnimTime = glm::fract(State->AnimTime);
+    State->AnimTime += Input->FrameDeltaSec;
+    f32 AnimPercent = glm::fract(State->AnimTime / State->Anim->Duration);
 
 
     // --------- Animation ---------
@@ -143,7 +175,7 @@ DAIS_UPDATE_AND_RENDER(GameUpdate) {
         Skel.LocalTransforms[Index] = Skel.Pose.SetupPose[Index];
     }
 
-    SetAnimationToPercent(&Skel, State->Anim, State->AnimTime);
+    SetAnimationToPercent(&Skel, State->Anim, AnimPercent);
 
     // Skel.LocalTransforms[32].Rotation = Skel.LocalTransforms[32].Rotation *
     //     glm::angleAxis(

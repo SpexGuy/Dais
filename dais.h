@@ -45,7 +45,17 @@ struct dais_file {
     void *Data;
 };
 
+struct dais_listing {
+    s32 Count;
+    char **Names;
+};
+
+struct memory_arena;
+
 // Dais API typedefs
+#define DAIS_LIST_DIRECTORY(name) dais_listing name(const char *Dir, memory_arena *Arena)
+typedef DAIS_LIST_DIRECTORY(dais_list_directory);
+
 #define DAIS_LOAD_FILE_BUFFER(name) dais_file name(const char *Filename)
 typedef DAIS_LOAD_FILE_BUFFER(dais_load_file_buffer);
 
@@ -83,6 +93,10 @@ struct dais {
     /** Frees a file buffer allocated in MapReadOnlyFile.
      *  Only needs to be called if MapReadOnlyFile succeeded. */
     dais_free_file_buffer *UnmapReadOnlyFile;
+
+    /** Lists the contents of a directory.
+     *  The list and names are allocated from the given Arena. */
+    dais_list_directory *ListDirectory;
 };
 
 struct dais_button {

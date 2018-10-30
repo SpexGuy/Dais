@@ -5,8 +5,10 @@
 
 #include <mach/mach_init.h>
 #include <mach/mach_time.h> // mach_absolute_time, for accurate monotonic time
+#include <sys/dir.h> // opendir et al
 #include <sys/mman.h> // mmap
 #include <sys/time.h> // gettimeofday, for system time
+#include <sys/types.h> // struct dirent
 #include <sys/stat.h>
 #include <errno.h>
 #include <time.h> // clock, for cpu time
@@ -21,6 +23,8 @@
 #include "imgui/imgui.h"
 #include "imgui/imgui_impl_glfw.h"
 #include "imgui/imgui_impl_opengl3.h"
+
+#include "arena.cpp"
 
 
 // ---------------- Compile-time Config ----------------
@@ -186,6 +190,63 @@ DAIS_FREE_FILE_BUFFER(OSXUnmapReadOnlyFile) {
         // free the metadata
         free(FileMeta);
     }
+}
+
+static inline
+bool KeepListEntry(char *Filename) {
+    return strcmp(Filename, ".") != 0 &&
+            strcmp(Filename, "..") != 0;
+}
+
+DAIS_LIST_DIRECTORY(OSXListDirectory) {
+    dais_listing Result = {};
+    Result.Count = -1;
+
+    // open the directory
+    DIR *Dirp = opendir(Dir);
+    if (Dirp) {
+        struct dirent *DirEnt;
+
+        // count the number of items
+        s32 Count = 0;
+        DirEnt = readdir(Dirp);
+        while (DirEnt) {
+            if (KeepListEntry(DirEnt->d_name)) {
+                Count++;
+            }
+            DirEnt = readdir(Dirp);
+        }
+
+        // copy the data from the items
+        Result.Count = Count;
+        if (Count > 0) {
+            // make space for the names
+            Result.Names = ArenaAllocTN(Arena, char *, Count);
+
+            // restart the directory iterator
+            rewinddir(Dirp);
+
+            // copy the name of each item
+            // in the event that the directory contents changed
+            // (this may be impossible, but I can't find documentation
+            //  clearly stating that it can't happen), make sure we
+            // don't overrun the buffer we allocated.  When finished,
+            // set the count to the actual number of items allocated.
+            s32 Index = 0;
+            DirEnt = readdir(Dirp);
+            while (DirEnt && Index < Count) {
+                if (KeepListEntry(DirEnt->d_name)) {
+                    Result.Names[Index] = ArenaStrcpy(Arena, DirEnt->d_name);
+                    Index++;
+                }
+                DirEnt = readdir(Dirp);
+            }
+            Result.Count = Index;
+        }
+        closedir(Dirp);
+    }
+
+    return Result;
 }
 
 
@@ -521,6 +582,7 @@ int main(int argc, char **argv) {
     Platform.FreeFileBuffer = OSXFreeFileBuffer;
     Platform.MapReadOnlyFile = OSXMapReadOnlyFile;
     Platform.UnmapReadOnlyFile = OSXUnmapReadOnlyFile;
+    Platform.ListDirectory = OSXListDirectory;
 
     Platform.ContinueRunning = true;
 

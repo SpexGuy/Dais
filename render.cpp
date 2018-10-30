@@ -383,7 +383,9 @@ void RenderSkinnedMesh(shader_state *Shaders, skinned_mesh *Mesh, skeleton *Skel
         // TODO: Fix bug in importer that causes 32 bone IDs
         if (Draw->NumBoneIDs == 0 || Draw->NumBoneIDs == 32) {
             glUseProgram(Shaders->TexProgramID);
-            glUniformMatrix4fv(Shaders->TexProjection, 1, GL_FALSE, &Projection[0][0]);
+            u32 ParentID = Draw->ParentBoneID;
+            mat4 FullMatrix = Projection * mat4(Skel->WorldMatrices[ParentID]);
+            glUniformMatrix4fv(Shaders->TexProjection, 1, GL_FALSE, &FullMatrix[0][0]);
             glUniform1i(Shaders->TexDiffuseTexture, 0);
         } else {
             u16 NumBones = Draw->NumBoneIDs;

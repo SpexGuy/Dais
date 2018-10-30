@@ -147,7 +147,13 @@ vec3 Mix(vec3 &From, vec3 &To, f32 RawInterp) {
 
 static inline
 quat Mix(quat &From, quat &To, f32 RawInterp) {
-    return glm::slerp(From, To, RawInterp);
+    // Approximates slerp for small angles
+    // Does not normalize the resulting quaternion
+    // As long as the quaternions are close together, this is fine.
+    f32 Cosom = glm::dot(From, To);
+    f32 Scale0 = 1.0f - RawInterp;
+    f32 Scale1 = copysignf(RawInterp, Cosom);
+    return Scale0 * From + Scale1 * To;
 }
 
 template <typename pt>

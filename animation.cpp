@@ -114,8 +114,8 @@ u32 BinarySearchLower(f32 *Values, u32 Count, f32 Target) {
     Assert(Count >= 2);
 
     // TODO: fix the importer to avoid these cases
-    if (Values[0] <= Target) return 0;
-    if (Values[Count-1] >= Target) return Count-2;
+    if (Values[0] >= Target) return 0;
+    if (Values[Count-1] <= Target) return Count-2;
 
     Assert(Values[0] <= Target);
     Assert(Values[Count-1] >= Target);
@@ -140,6 +140,16 @@ u32 BinarySearchLower(f32 *Values, u32 Count, f32 Target) {
     return Low;
 }
 
+static inline
+vec3 Mix(vec3 &From, vec3 &To, f32 RawInterp) {
+    return glm::mix(From, To, RawInterp);
+}
+
+static inline
+quat Mix(quat &From, quat &To, f32 RawInterp) {
+    return glm::slerp(From, To, RawInterp);
+}
+
 template <typename pt>
 static
 pt LookupAtPercent(timeline<pt> &Timeline, f32 Percent) {
@@ -151,10 +161,10 @@ pt LookupAtPercent(timeline<pt> &Timeline, f32 Percent) {
     int Index = BinarySearchLower(Timeline.Percentages, Timeline.KeyframeCount, Percent);
     f32 Lowp = Timeline.Percentages[Index];
     f32 Highp = Timeline.Percentages[Index+1];
-    f32 RawInterp = (Percent - Lowp) / (Highp - Lowp);
+    f32 RawInterp = glm::clamp((Percent - Lowp) / (Highp - Lowp), 0.0f, 1.0f);
     pt &From = Timeline.Values[Index];
     pt &To = Timeline.Values[Index+1];
-    pt Result = glm::mix(From, To, RawInterp);
+    pt Result = Mix(From, To, RawInterp);
     return Result;
 }
 

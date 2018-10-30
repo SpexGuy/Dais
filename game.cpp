@@ -89,9 +89,9 @@ DAIS_UPDATE_AND_RENDER(GameUpdate) {
             UploadMeshesToOGL(State->SkinnedMesh);
         }
 
-        // State->AnimFile = Platform->MapReadOnlyFile("../Avatar/Animations/Idle_JumpDownLow_BackFlip_Idle.ska");
-        // State->AnimFile = Platform->MapReadOnlyFile("../Avatar/Animations/Idle_JumpDownLow_BackFlip_Idle.ska");
-        State->AnimFile = Platform->MapReadOnlyFile("../Avatar/Animations/Run_wallPush.ska");
+        State->AnimFile = Platform->MapReadOnlyFile("../Avatar/Animations/Idle_JumpDownLow_BackFlip_Idle.ska");
+        //State->AnimFile = Platform->MapReadOnlyFile("../Avatar/Animations/SmallStep.ska");
+        //State->AnimFile = Platform->MapReadOnlyFile("../Avatar/Animations/Run_wallPush.ska");
         if (State->AnimFile.Handle == DAIS_BAD_FILE) {
             printf("Failed to load animation.\n");
             exit(-1);
@@ -124,7 +124,7 @@ DAIS_UPDATE_AND_RENDER(GameUpdate) {
     State->LastCursorPos = CursorPos;
 
     State->Angle += Input->FrameDeltaSec * 90;
-    State->AnimTime += Input->FrameDeltaSec / 2;
+    State->AnimTime += Input->FrameDeltaSec / 4;
     State->AnimTime = glm::fract(State->AnimTime);
 
 
@@ -186,7 +186,8 @@ DAIS_UPDATE_AND_RENDER(GameUpdate) {
     LookDirection = glm::rotateX(LookDirection, Pitch);
     LookDirection = glm::rotateY(LookDirection, Yaw);
 
-    vec3 LookCenter = Skel.WorldMatrices[1][3];
+    vec3 LookCenter = Skel.WorldMatrices[2] *
+            vec4(Skel.WorldSetupMatrices[3][3], 1.0f);
     vec3 LookSource = LookCenter - LookDirection * HalfDepth;
 
     mat4 View = glm::lookAt(

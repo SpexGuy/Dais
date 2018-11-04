@@ -15,6 +15,8 @@
 #include <glm/gtx/rotate_vector.hpp>
 #include <glm/gtc/quaternion.hpp>
 
+#include "imgui/imgui.h"
+
 using glm::vec2;
 using glm::vec3;
 using glm::vec4;
@@ -130,6 +132,17 @@ DAIS_UPDATE_AND_RENDER(GameUpdate) {
     if (Platform->JustReloaded) {
         State->ShaderState = InitShaders(&State->GameArena);
     }
+
+
+    // ---------- ImGUI ----------
+    ImGui::Begin("Window");
+    int AnimIndex = State->CurrentAnimation;
+    ImGui::Combo("Current Animation", &AnimIndex, State->AnimationsList.Names, State->AnimationsList.Count);
+    if (AnimIndex != State->CurrentAnimation) {
+        State->CurrentAnimation = AnimIndex;
+        LoadNextAnimation();
+    }
+    ImGui::End();
 
 
     // ---------- Input Handling ----------

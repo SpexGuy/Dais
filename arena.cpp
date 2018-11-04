@@ -21,7 +21,7 @@ void ArenaAlign(memory_arena *Arena, u32 Align) {
 
 static
 void *ArenaAlloc(memory_arena *Arena, u32 Size) {
-    Assert(Arena->Pos + Size > Arena->Pos); // overflow check
+    Assert(Arena->Pos + Size >= Arena->Pos); // overflow check
     Assert(Arena->Pos + Size <= Arena->Capacity); // bounds check
     char *Alloc = Arena->Base + Arena->Pos;
     Arena->Pos += Size;

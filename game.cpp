@@ -75,6 +75,11 @@ struct state {
 #define TEMP_MEM_SIZE Megabytes(2)
 #define GAME_OFFSET Kilobytes(4)
 
+#define PERF_STAT(NAME) \
+    dais_perf_stat NAME##Stat__ (PlatformRef, #NAME)
+#define PERF_END(NAME) \
+    NAME##Stat__.end()
+
 static
 void LoadNextAnimation() {
     printf("Loading next animation (id %d)\n", State->CurrentAnimation);
@@ -105,6 +110,9 @@ DAIS_UPDATE_AND_RENDER(GameUpdate) {
     TempArena = &State->TempArena;
     PermArena = &State->GameArena;
     PlatformRef = Platform;
+
+    PERF_STAT(Frame);
+
     if (!Platform->Initialized) {
         ArenaInit(&State->TempArena, Platform->Memory + (Platform->MemorySize - TEMP_MEM_SIZE), TEMP_MEM_SIZE);
         ArenaInit(&State->GameArena, Platform->Memory + GAME_OFFSET, Platform->MemorySize - TEMP_MEM_SIZE - 2*GAME_OFFSET);
@@ -135,6 +143,7 @@ DAIS_UPDATE_AND_RENDER(GameUpdate) {
 
 
     // ---------- ImGUI ----------
+    PERF_STAT(ImGUI);
     ImGui::Begin("Window");
     int AnimIndex = State->CurrentAnimation;
     ImGui::Combo("Current Animation", &AnimIndex, State->AnimationsList.Names, State->AnimationsList.Count);
@@ -143,10 +152,12 @@ DAIS_UPDATE_AND_RENDER(GameUpdate) {
         LoadNextAnimation();
     }
     ImGui::End();
+    PERF_END(ImGUI);
 
 
     // ---------- Input Handling ----------
 
+    PERF_STAT(Input);
     vec2 CursorPos = vec2((f32) Input->CursorX / Input->WindowWidth,
                           (f32) Input->CursorY / Input->WindowHeight);
 
@@ -171,11 +182,14 @@ DAIS_UPDATE_AND_RENDER(GameUpdate) {
     State->Angle += Input->FrameDeltaSec * 90;
     State->AnimTime += Input->FrameDeltaSec;
     f32 AnimPercent = glm::fract(State->AnimTime / State->Anim->Duration);
+    PERF_END(Input);
 
 
     // --------- Animation ---------
 
+    PERF_STAT(Animation);
     skeleton Skel;
+    PERF_STAT(AnimationBake);
     Skel.Pose = State->SkinnedMesh->BindPose;
     Skel.LocalSetupMatrices = ArenaAllocTN(TempArena, mat4x3, Skel.Pose.BoneCount);
     Skel.InverseLocalSetupMatrices = ArenaAllocTN(TempArena, mat4x3, Skel.Pose.BoneCount);
@@ -187,6 +201,7 @@ DAIS_UPDATE_AND_RENDER(GameUpdate) {
     for (u32 Index = 0; Index < Skel.Pose.BoneCount; Index++) {
         Skel.LocalTransforms[Index] = Skel.Pose.SetupPose[Index];
     }
+    PERF_END(AnimationBake);
 
     SetAnimationToPercent(&Skel, State->Anim, AnimPercent);
 
@@ -212,10 +227,12 @@ DAIS_UPDATE_AND_RENDER(GameUpdate) {
     Skel.WorldMatrices = ArenaAllocTN(TempArena, mat4x3, Skel.Pose.BoneCount);
 
     UpdateMatricesFromTransforms(&Skel);
+    PERF_END(Animation);
 
 
     // -------- Prepare Matrices ---------
 
+    PERF_STAT(Matrices);
     float Aspect = (float) Input->WindowWidth / Input->WindowHeight;
     float HalfHeight = 100;
     float HalfDepth = 100 * HalfHeight;
@@ -242,10 +259,12 @@ DAIS_UPDATE_AND_RENDER(GameUpdate) {
     );
 
     mat4 Combined = Projection * View;
+    PERF_END(Matrices);
 
 
     // -------- Rendering ---------
 
+    PERF_STAT(Rendering);
     glClearColor(0.2f, 0.2f, 0.2f, 1.0f);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
     glEnable(GL_DEPTH_TEST);
@@ -254,10 +273,11 @@ DAIS_UPDATE_AND_RENDER(GameUpdate) {
     RenderSkinnedMesh(State->ShaderState, State->SkinnedMesh, &Skel, Combined);
     glDisable(GL_DEPTH_TEST);
     RenderBones(State->ShaderState, &Skel, Combined);
-
+    PERF_END(Rendering);
 
     // ---------- Cleanup -----------
 
+    PERF_STAT(Cleanup);
     if (State->TempArena.Pos > State->TempArenaMaxSize) {
         u32 Size = State->TempArena.Pos;
         State->TempArenaMaxSize = Size;
@@ -273,5 +293,6 @@ DAIS_UPDATE_AND_RENDER(GameUpdate) {
         }
     }
     ArenaClear(&State->TempArena);
+    PERF_END(Cleanup);
 }
 

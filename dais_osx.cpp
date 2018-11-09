@@ -75,6 +75,87 @@ recording_state RecordingState;
 
 GLFWwindow *Window;
 
+
+// ----------------- Perf ----------------
+
+struct perf_stat {
+    u64 TotalTime;
+    u32 TotalCount;
+};
+
+#define MAX_PERF_STATS 200
+u32 UsedPerfStats = 0;
+const char *StatNames[MAX_PERF_STATS];
+u64 StatTimes[MAX_PERF_STATS];
+u64 StatMax[MAX_PERF_STATS];
+u32 StatCounts[MAX_PERF_STATS];
+
+DAIS_SUBMIT_STAT(OSXPerfStat) {
+    u32 Index;
+    for (Index = 0; Index < UsedPerfStats; Index++) {
+        // assume strings are reference equal, since they are the same point in code.
+        if (StatNames[Index] == Name) {
+            break;
+        }
+    }
+
+    if (Index == UsedPerfStats) {
+        if (UsedPerfStats < MAX_PERF_STATS) {
+            UsedPerfStats++;
+            StatNames[Index] = Name;
+            StatTimes[Index] = Time;
+            StatMax[Index] = Time;
+            StatCounts[Index] = 1;
+        }
+    } else {
+        StatTimes[Index] += Time;
+        if (Time > StatMax[Index]) StatMax[Index] = Time;
+        StatCounts[Index]++;
+    }
+}
+
+static
+void ClearPerfStats() {
+    UsedPerfStats = 0;
+}
+
+static
+void PrintPerfTime(u64 Nanos) {
+    if (Nanos < 100000UL) {
+        printf("%7llunS", Nanos);
+    } else if (Nanos < 100000000UL) {
+        printf("%7lluuS", Nanos / 1000);
+    } else if (Nanos < 100000000000UL) {
+        printf("%7llumS", Nanos / 1000000UL);
+    } else {
+        printf("%7llu S", Nanos / 1000000000UL);
+    }
+}
+
+static
+void PrintPerfReport(u32 NumFrames) {
+    if (UsedPerfStats != 0) {
+        printf("\n------- Perf Stats -------\n");
+        printf(" PerFrame  Average      Max    Count  Name\n");
+        for (u32 Index = 0; Index < UsedPerfStats; Index++) {
+            const char *Name = StatNames[Index];
+            u64 Total = StatTimes[Index];
+            u64 Max = StatMax[Index];
+            u32 Count = StatCounts[Index];
+            u64 PerFrame = Total / NumFrames;
+            u64 Average = Total / Count;
+            PrintPerfTime(PerFrame);
+            PrintPerfTime(Average);
+            PrintPerfTime(Max);
+            printf("  %7u  %s\n",
+                Count, Name);
+        }
+        printf("\n");
+        ClearPerfStats();
+    }
+}
+
+
 // ----------------- Files ----------------
 
 struct mapped_file {
@@ -583,6 +664,8 @@ int main(int argc, char **argv) {
     Platform.MapReadOnlyFile = OSXMapReadOnlyFile;
     Platform.UnmapReadOnlyFile = OSXUnmapReadOnlyFile;
     Platform.ListDirectory = OSXListDirectory;
+    Platform.ReadPerformanceCounter = OSXNanoTime;
+    Platform.SubmitPerfStat = OSXPerfStat;
 
     Platform.ContinueRunning = true;
 
@@ -591,6 +674,8 @@ int main(int argc, char **argv) {
 
     u64 GameStartTime = OSXMilliTime();
     u64 LastFrameTime = GameStartTime;
+    u64 LastPerfReport = GameStartTime;
+    u32 PerfFrames = 0;
 
     glfwGetWindowSize(Window, &FrameInput.WindowWidth, &FrameInput.WindowHeight);
 
@@ -599,6 +684,9 @@ int main(int argc, char **argv) {
         if (DylibLastModified != 0 && DylibLastModified != Target.LastModified) {
             UpdateTarget(&Target);
             Platform.JustReloaded = true;
+            ClearPerfStats();
+            PerfFrames = 0;
+            LastPerfReport = OSXMilliTime();
         } else {
             Platform.JustReloaded = false;
         }
@@ -622,6 +710,13 @@ int main(int argc, char **argv) {
         ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
 
         glfwSwapBuffers(Window);
+
+        PerfFrames++;
+        if (FrameTime - LastPerfReport > 10000) {
+            LastPerfReport = FrameTime;
+            PrintPerfReport(PerfFrames);
+            PerfFrames = 0;
+        }
 
         LastFrameTime = FrameTime;
     }

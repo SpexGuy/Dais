@@ -65,6 +65,12 @@ typedef DAIS_FREE_FILE_BUFFER(dais_free_file_buffer);
 #define DAIS_VOID_FN(name) void name(void)
 typedef DAIS_VOID_FN(dais_void_fn);
 
+#define DAIS_READ_COUNTER(name)  u64 name(void)
+typedef DAIS_READ_COUNTER(dais_read_counter);
+
+#define DAIS_SUBMIT_STAT(name)  void name(const char *Name, u64 Time)
+typedef DAIS_SUBMIT_STAT(dais_submit_stat);
+
 struct dais {
     b32 Initialized;
 
@@ -97,6 +103,41 @@ struct dais {
     /** Lists the contents of a directory.
      *  The list and names are allocated from the given Arena. */
     dais_list_directory *ListDirectory;
+
+    /** Returns an ascending time counter in nS.
+     *  Data returned by this function will
+     *  _not_ be repeated in input replay. */
+    dais_read_counter *ReadPerformanceCounter;
+
+    /** Submits a performance record. */
+    dais_submit_stat *SubmitPerfStat;
+};
+
+struct dais_perf_stat {
+    dais *Platform;
+    const char *Name;
+    bool Ended;
+    u64 StartTime;
+
+    dais_perf_stat(dais *Platform, const char *Name) :
+        Platform(Platform),
+        Name(Name),
+        Ended(false),
+        StartTime(Platform->ReadPerformanceCounter())
+        {}
+
+    inline
+    void end() {
+        u64 EndTime = Platform->ReadPerformanceCounter();
+        Platform->SubmitPerfStat(Name, EndTime - StartTime);
+        Ended = true;
+    }
+
+    ~dais_perf_stat() {
+        if (!Ended) {
+            end();
+        }
+    }
 };
 
 struct dais_button {

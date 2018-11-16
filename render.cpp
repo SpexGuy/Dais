@@ -3,6 +3,12 @@ struct normal_mesh {
     u32 Count;
 };
 
+struct floor_grid {
+    u32 VaoID;
+    u32 Count;
+};
+
+
 static
 void LoadTexture(GLuint Texname, const char *Filename) {
     glBindTexture(GL_TEXTURE_2D, Texname);
@@ -68,6 +74,58 @@ normal_mesh *GenerateNormalMeshes(memory_arena *Perm, memory_arena *Temp, skinne
         ArenaRestore(Temp, TempRestore);
     }
     return Nors;
+}
+
+#define GRID_RADIUS_POINTS 15
+
+static
+void InitFloorGrid(floor_grid *Grid) {
+    u32 RadiusPoints = GRID_RADIUS_POINTS;
+    u32 Width = (RadiusPoints * 2) - 1;
+    u32 TotalPoints = Width * 4; // width points along each of the four sides
+
+    u32 TempRestore = TempArena->Pos;
+    vec2 *Points = ArenaAllocTN(TempArena, vec2, TotalPoints);
+
+    float Radius = (float) RadiusPoints;
+
+    // create the grid of lines
+    vec2 *Current = Points;
+    // center lines
+    Current[0] = vec2(0, Radius);
+    Current[1] = vec2(0, -Radius);
+    Current[2] = vec2(Radius, 0);
+    Current[3] = vec2(-Radius, 0);
+    Current += 4;
+    // other lines
+    for (u32 PointIndex = 1; PointIndex < RadiusPoints; PointIndex++) {
+        f32 U = (f32) RadiusPoints;
+        f32 V = (f32) (PointIndex);
+        Current[0] = vec2( U,  V);
+        Current[1] = vec2(-U,  V);
+        Current[2] = vec2( U, -V);
+        Current[3] = vec2(-U, -V);
+        Current[4] = vec2( V,  U);
+        Current[5] = vec2( V, -U);
+        Current[6] = vec2(-V,  U);
+        Current[7] = vec2(-V, -U);
+        Current += 8;
+    }
+
+    Grid->Count = TotalPoints;
+
+    u32 BufferID;
+    glGenVertexArrays(1, &Grid->VaoID);
+    glBindVertexArray(Grid->VaoID);
+    glGenBuffers(1, &BufferID);
+    glBindBuffer(GL_ARRAY_BUFFER, BufferID);
+    glBufferData(GL_ARRAY_BUFFER, Grid->Count * sizeof(vec2), Points, GL_STATIC_DRAW);
+    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, sizeof(vec2), 0);
+    glEnableVertexAttribArray(0);
+
+    CheckGLError();
+
+    ArenaRestore(TempArena, TempRestore);
 }
 
 static
@@ -204,6 +262,38 @@ const char *SkinVertexShader = MULTILINE_STR(
 
 const char *SkinFragmentShader = TexFragmentShader;
 
+const char *GridVertexShader = GLSL(
+    layout(location=0) in vec2 Position;
+
+    uniform mat4 Projection;
+    uniform vec2 CenterPosition;
+    uniform float Density;
+
+    out vec2 RelativePosition;
+
+    void main() {
+        vec2 SnappedCenter = floor(CenterPosition / Density);
+        vec2 SnappedPos = (Position + SnappedCenter) * Density;
+        RelativePosition = SnappedPos - CenterPosition;
+        gl_Position = Projection * vec4(SnappedPos.x, 0.0, SnappedPos.y, 1.0);
+    }
+);
+
+const char *GridFragmentShader = GLSL(
+    uniform float Radius;
+
+    in vec2 RelativePosition;
+
+    out vec4 Color;
+
+    void main() {
+        float FragRadius = length(RelativePosition);
+        float Alpha = smoothstep(Radius, 0.8 * Radius, FragRadius);
+        Color = vec4(0.6, 0.6, 0.6, Alpha);
+    }
+);
+
+
 const char *NorVertexShader = GLSL(
     layout(location=0) in vec3 Position;
 
@@ -237,11 +327,20 @@ struct skin_shader {
 struct shader_state {
     u32 ProgramID;
     u32 Projection;
+
     u32 NorProgramID;
     u32 NorProjection;
+
     u32 TexProgramID;
     u32 TexProjection;
     u32 TexDiffuseTexture;
+
+    u32 GridProgramID;
+    u32 GridProjection;
+    u32 GridCenterPosition;
+    u32 GridDensity;
+    u32 GridRadius;
+
     u32 TmpVertexBuffer;
     u32 TmpVao;
     skin_shader *SkinShaders[MAX_SKIN_SHADERS];
@@ -282,15 +381,36 @@ shader_state *InitShaders(memory_arena *Arena) {
     shader_state *State = ArenaAllocT(Arena, shader_state);
     State->ProgramID = CompileShader(DefaultVertexShader, DefaultFragmentShader);
     State->Projection = glGetUniformLocation(State->ProgramID, "Projection");
+
     State->NorProgramID = CompileShader(NorVertexShader, NorFragmentShader);
     State->NorProjection = glGetUniformLocation(State->NorProgramID, "Projection");
+
     State->TexProgramID = CompileShader(TexVertexShader, TexFragmentShader);
     State->TexProjection = glGetUniformLocation(State->TexProgramID, "Projection");
     State->TexDiffuseTexture = glGetUniformLocation(State->TexProgramID, "DiffuseTexture");
+
+    State->GridProgramID = CompileShader(GridVertexShader, GridFragmentShader);
+    State->GridProjection = glGetUniformLocation(State->GridProgramID, "Projection");
+    State->GridCenterPosition = glGetUniformLocation(State->GridProgramID, "CenterPosition");
+    State->GridDensity = glGetUniformLocation(State->GridProgramID, "Density");
+    State->GridRadius = glGetUniformLocation(State->GridProgramID, "Radius");
+
     glGenBuffers(1, &State->TmpVertexBuffer);
     glGenVertexArrays(1, &State->TmpVao);
     CheckGLError();
     return State;
+}
+
+static
+void RenderGrid(shader_state *Shaders, floor_grid *Grid, vec2 CenterPos, float Density, mat4 &Projection) {
+    glUseProgram(Shaders->GridProgramID);
+    glUniformMatrix4fv(Shaders->GridProjection, 1, GL_FALSE, &Projection[0][0]);
+    glUniform2f(Shaders->GridCenterPosition, CenterPos.x, CenterPos.y);
+    glUniform1f(Shaders->GridDensity, Density);
+    glUniform1f(Shaders->GridRadius, Density * (GRID_RADIUS_POINTS));
+    glBindVertexArray(Grid->VaoID);
+    glDrawArrays(GL_LINES, 0, Grid->Count);
+    CheckGLError();
 }
 
 static

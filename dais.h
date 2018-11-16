@@ -77,6 +77,11 @@ struct dais {
     /** When this is set to false, dais will terminate. */
     b32 ContinueRunning;
 
+    /** If dais is compiled in debug mode and this is
+     *  set to true, dais will print performance counter
+     *  information every 10 seconds. */
+    b32 PrintPerformanceCounters;
+
     b32 JustReloaded;
 
     u64 MemorySize;

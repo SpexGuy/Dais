@@ -712,7 +712,8 @@ int main(int argc, char **argv) {
         glfwSwapBuffers(Window);
 
         PerfFrames++;
-        if (FrameTime - LastPerfReport > 10000) {
+        if (Platform.PrintPerformanceCounters &&
+                FrameTime - LastPerfReport > 10000) {
             LastPerfReport = FrameTime;
             PrintPerfReport(PerfFrames);
             PerfFrames = 0;

@@ -55,6 +55,7 @@ struct state {
     dais_file SkeletonFile;
     dais_file AnimFile;
 
+    floor_grid Grid;
     skinned_mesh *SkinnedMesh;
     // use a pointer so we can hotswap a size change
     shader_state *ShaderState;
@@ -127,6 +128,8 @@ DAIS_UPDATE_AND_RENDER(GameUpdate) {
             State->SkinnedMesh = LoadMeshData(&State->GameArena, State->SkeletonFile.Data);
             UploadMeshesToOGL(State->SkinnedMesh);
         }
+
+        InitFloorGrid(&State->Grid);
 
         State->LastCursorPos = vec2(
             (f32) Input->CursorX / Input->WindowWidth,
@@ -269,6 +272,11 @@ DAIS_UPDATE_AND_RENDER(GameUpdate) {
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
     glEnable(GL_DEPTH_TEST);
     glEnable(GL_CULL_FACE);
+
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    RenderGrid(State->ShaderState, &State->Grid, vec2(LookCenter.x, LookCenter.z), 5, Combined);
+    glDisable(GL_BLEND);
 
     RenderSkinnedMesh(State->ShaderState, State->SkinnedMesh, &Skel, Combined);
     glDisable(GL_DEPTH_TEST);

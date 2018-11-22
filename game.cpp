@@ -91,6 +91,7 @@ struct state {
     bool TestLoop;
     bool RenderSkeleton;
     bool RenderGrid;
+    bool ShowImguiTestWindow;
 };
 
 #define TEMP_MEM_SIZE Megabytes(2)
@@ -171,8 +172,10 @@ DAIS_UPDATE_AND_RENDER(GameUpdate) {
 
     // ---------- ImGUI ----------
     PERF_STAT(ImGUI);
-    static bool showing = true;
-    ImGui::ShowDemoWindow(&showing);
+
+    if (State->ShowImguiTestWindow) {
+        ImGui::ShowDemoWindow(&State->ShowImguiTestWindow);
+    }
 
     // options
     float OptionsWidth = Input->WindowWidth * 0.2f;
@@ -216,14 +219,15 @@ DAIS_UPDATE_AND_RENDER(GameUpdate) {
         State->ViewEnd = State->Anim->Duration;
     }
 
-    ImGui::Checkbox("Test Loop", &State->TestLoop);
-    ImGui::Checkbox("Render Grid", &State->RenderGrid);
-    ImGui::Checkbox("Render Skeleton", &State->RenderSkeleton);
-
     if (State->ViewStart < 0) State->ViewStart = 0;
     if (State->ViewEnd > State->Anim->Duration) State->ViewEnd = State->Anim->Duration;
     if (State->ViewEnd <= State->ViewStart) State->ViewEnd = State->ViewStart + 0.01f;
 
+    ImGui::Checkbox("Test Loop", &State->TestLoop);
+    ImGui::Checkbox("Render Grid", &State->RenderGrid);
+    ImGui::Checkbox("Render Skeleton", &State->RenderSkeleton);
+
+    ImGui::Checkbox("Show ImGui Test Window", &State->ShowImguiTestWindow);
     ImGui::End();
 
     // timeline

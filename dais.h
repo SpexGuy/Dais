@@ -159,8 +159,15 @@ struct dais_input {
     s32 WindowWidth;
     s32 WindowHeight;
 
+    // if ImGui has captured input,
+    // these continue to be updated
     s32 CursorX;
     s32 CursorY;
+
+    // if ImGui has captured input,
+    // these will be zero.
+    s32 CursorDeltaX;
+    s32 CursorDeltaY;
 
     union {
         dais_button MouseButtons[3];

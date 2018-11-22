@@ -776,6 +776,8 @@ int main(int argc, char **argv) {
         FrameInput.FrameDeltaMS = (u32) (FrameTime - LastFrameTime);
         FrameInput.FrameDeltaSec = FrameInput.FrameDeltaMS * 0.001f;
 
+        int CursorStartX = FrameInput.CursorX;
+        int CursorStartY = FrameInput.CursorY;
         // call our input callbacks from GLFW
         // ideally we would do this after StartImguiFrame
         // so that we could update WantCapture*
@@ -785,7 +787,16 @@ int main(int argc, char **argv) {
         // which hopefully isn't so bad.
         glfwPollEvents();
 
+        if (io.WantCaptureMouse) {
+            FrameInput.CursorDeltaX = 0;
+            FrameInput.CursorDeltaY = 0;
+        } else {
+            FrameInput.CursorDeltaX = CursorStartX - FrameInput.CursorX;
+            FrameInput.CursorDeltaY = CursorStartY - FrameInput.CursorY;
+        }
+
         StartImguiFrame();
+
 
         dais_input *InputToUse = PreProcessInput();
 

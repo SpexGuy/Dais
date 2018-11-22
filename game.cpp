@@ -71,7 +71,6 @@ struct state {
 
     animation *Anim;
 
-    vec2 LastCursorPos;
     vec2 CamPos;
 
     float Angle;
@@ -155,10 +154,6 @@ DAIS_UPDATE_AND_RENDER(GameUpdate) {
         }
 
         InitFloorGrid(&State->Grid);
-
-        State->LastCursorPos = vec2(
-            (f32) Input->CursorX / Input->WindowWidth,
-            (f32) Input->CursorY / Input->WindowHeight);
 
         State->AnimationsList = Platform->ListDirectory("../Avatar/Animations", PermArena);
 
@@ -250,11 +245,12 @@ DAIS_UPDATE_AND_RENDER(GameUpdate) {
     // ---------- Input Handling ----------
 
     PERF_STAT(Input);
-    vec2 CursorPos = vec2((f32) Input->CursorX / Input->WindowWidth,
-                          (f32) Input->CursorY / Input->WindowHeight);
 
     if (Input->LeftMouseButton.Pressed) {
-        State->CamPos += (CursorPos - State->LastCursorPos);
+        vec2 CursorDelta = vec2(
+            (f32) Input->CursorDeltaX / Input->WindowWidth,
+            (f32) Input->CursorDeltaY / Input->WindowHeight);
+        State->CamPos -= CursorDelta;
         State->CamPos.x = glm::fract(State->CamPos.x);
         State->CamPos.y = glm::clamp(State->CamPos.y, -0.499f, 0.499f);
     }
@@ -268,8 +264,6 @@ DAIS_UPDATE_AND_RENDER(GameUpdate) {
         }
         LoadNextAnimation();
     }
-
-    State->LastCursorPos = CursorPos;
 
     if (State->ClipEnd <= State->ClipStart) State->ClipEnd = State->ClipStart + 0.001f;
     if (State->AnimTime < State->ClipStart) State->AnimTime = State->ClipStart;

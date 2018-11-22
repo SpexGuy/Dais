@@ -16,6 +16,7 @@
 #include <glm/gtc/quaternion.hpp>
 
 #include "imgui/imgui.h"
+#include "imgui/imgui_demo.cpp"
 
 using glm::vec2;
 using glm::vec3;
@@ -31,6 +32,14 @@ using glm::mat4x3;
 #include "dais.h"
 #include "dais_render.h"
 #include "arena.cpp"
+
+// -------- Constants --------
+
+ImGuiWindowFlags ImGuiStaticPane =
+        ImGuiWindowFlags_NoTitleBar |
+        ImGuiWindowFlags_NoResize |
+        ImGuiWindowFlags_NoMove |
+        ImGuiWindowFlags_NoCollapse;
 
 // -------- Global Variables --------
 
@@ -68,9 +77,21 @@ struct state {
     float Angle;
     float AnimTime;
 
+    float ClipStart;
+    float ClipEnd;
+
+    float AnimSpeed;
+
     u32 LastPressID;
     u32 CurrentAnimation;
     dais_listing AnimationsList;
+
+    float ViewStart;
+    float ViewEnd;
+
+    bool TestLoop;
+    bool RenderSkeleton;
+    bool RenderGrid;
 };
 
 #define TEMP_MEM_SIZE Megabytes(2)
@@ -99,6 +120,10 @@ void LoadNextAnimation() {
     } else {
         State->Anim = LoadAnimation(PermArena, State->AnimFile.Data);
         State->AnimTime = 0;
+        State->ClipStart = 0;
+        State->ClipEnd = State->Anim->Duration;
+        State->ViewStart = 0;
+        State->ViewEnd = State->Anim->Duration;
     }
 }
 
@@ -137,6 +162,10 @@ DAIS_UPDATE_AND_RENDER(GameUpdate) {
 
         State->AnimationsList = Platform->ListDirectory("../Avatar/Animations", PermArena);
 
+        State->AnimSpeed = 1.0f;
+
+        State->RenderGrid = true;
+
         LoadNextAnimation();
     }
 
@@ -147,14 +176,74 @@ DAIS_UPDATE_AND_RENDER(GameUpdate) {
 
     // ---------- ImGUI ----------
     PERF_STAT(ImGUI);
-    ImGui::Begin("Window");
+    static bool showing = true;
+    ImGui::ShowDemoWindow(&showing);
+
+    // options
+    float OptionsWidth = Input->WindowWidth * 0.2f;
+    ImVec2 TopRight = ImVec2(Input->WindowWidth, 0);
+    ImVec2 TRPivot = ImVec2(1.0f, 0.0f);
+    ImVec2 WindowSize = ImVec2(OptionsWidth, Input->WindowHeight);
+    ImGui::SetNextWindowPos(TopRight, ImGuiCond_Always, TRPivot);
+    ImGui::SetNextWindowSize(WindowSize, ImGuiCond_Always);
+    ImGui::Begin("Window", 0, ImGuiStaticPane);
     int AnimIndex = State->CurrentAnimation;
     ImGui::Combo("Current Animation", &AnimIndex, State->AnimationsList.Names, State->AnimationsList.Count);
     if (AnimIndex != State->CurrentAnimation) {
         State->CurrentAnimation = AnimIndex;
         LoadNextAnimation();
     }
+
+    ImGui::SliderFloat("Speed", &State->AnimSpeed, 0, 3);
+    if (ImGui::Button("Reset Speed")) {
+        State->AnimSpeed = 1.0f;
+    }
+
+    if (ImGui::Button("Crop")) {
+        State->ViewStart = State->ClipStart;
+        State->ViewEnd = State->ClipEnd;
+    }
+    ImGui::SameLine();
+    if (ImGui::Button("Zoom Out")) {
+        float Scale = State->ViewEnd - State->ViewStart;
+        State->ViewEnd += Scale * 0.1f;
+        State->ViewStart -= Scale * 0.1f;
+    }
+    ImGui::SameLine();
+    if (ImGui::Button("Zoom In")) {
+        float Scale = State->ViewEnd - State->ViewStart;
+        State->ViewEnd -= Scale * 0.1f;
+        State->ViewStart += Scale * 0.1f;
+    }
+    ImGui::SameLine();
+    if (ImGui::Button("Reset")) {
+        State->ViewStart = 0;
+        State->ViewEnd = State->Anim->Duration;
+    }
+
+    ImGui::Checkbox("Test Loop", &State->TestLoop);
+    ImGui::Checkbox("Render Grid", &State->RenderGrid);
+    ImGui::Checkbox("Render Skeleton", &State->RenderSkeleton);
+
+    if (State->ViewStart < 0) State->ViewStart = 0;
+    if (State->ViewEnd > State->Anim->Duration) State->ViewEnd = State->Anim->Duration;
+    if (State->ViewEnd <= State->ViewStart) State->ViewEnd = State->ViewStart + 0.01f;
+
     ImGui::End();
+
+    // timeline
+    float TimelineHeight = 82;
+    ImVec2 TimelineSize = ImVec2(Input->WindowWidth - OptionsWidth, TimelineHeight);
+    ImVec2 BottomLeft = ImVec2(0.0f, Input->WindowHeight);
+    ImVec2 BLPivot = ImVec2(0.0f, 1.0f);
+    ImGui::SetNextWindowPos(BottomLeft, ImGuiCond_Always, BLPivot);
+    ImGui::SetNextWindowSize(TimelineSize);
+    ImGui::Begin("Timeline", 0, ImGuiStaticPane);
+    ImGui::SliderFloat("Start", &State->ClipStart, State->ViewStart, State->ViewEnd);
+    ImGui::SliderFloat("Time", &State->AnimTime, State->ViewStart, State->ViewEnd);
+    ImGui::SliderFloat("End", &State->ClipEnd, State->ViewStart, State->ViewEnd);
+    ImGui::End();
+
     PERF_END(ImGUI);
 
 
@@ -182,9 +271,33 @@ DAIS_UPDATE_AND_RENDER(GameUpdate) {
 
     State->LastCursorPos = CursorPos;
 
-    State->Angle += Input->FrameDeltaSec * 90;
-    State->AnimTime += Input->FrameDeltaSec;
-    f32 AnimPercent = glm::fract(State->AnimTime / State->Anim->Duration);
+    if (State->ClipEnd <= State->ClipStart) State->ClipEnd = State->ClipStart + 0.001f;
+    if (State->AnimTime < State->ClipStart) State->AnimTime = State->ClipStart;
+
+
+    float AnimDelta = Input->FrameDeltaSec * State->AnimSpeed;
+    float ClipLength = State->ClipEnd - State->ClipStart;
+    float RelativePos = State->AnimTime - State->ClipStart;
+    RelativePos = fmod(RelativePos + AnimDelta, ClipLength);
+
+    if (State->TestLoop) { 
+        // when loop testing, calculate a half-second
+        // zone on each end of the loop.  If the current
+        // time is between these two zones, move the
+        // animation time to the start of the later zone.
+
+        // the time on each end of the loop
+        float TestTimeSecHalf = 0.5f;
+        float TestTimeAnimHalf = TestTimeSecHalf * State->AnimSpeed;
+        if (RelativePos > TestTimeAnimHalf &&
+                RelativePos < ClipLength - TestTimeAnimHalf) {
+            RelativePos = ClipLength - TestTimeAnimHalf;
+        }
+    }
+
+    State->AnimTime = State->ClipStart + RelativePos;
+
+    f32 AnimPercent = State->AnimTime / State->Anim->Duration;
     PERF_END(Input);
 
 
@@ -236,14 +349,17 @@ DAIS_UPDATE_AND_RENDER(GameUpdate) {
     // -------- Prepare Matrices ---------
 
     PERF_STAT(Matrices);
+    float ClipSpaceLeft = OptionsWidth / Input->WindowWidth;
+    float ClipSpaceUp = TimelineHeight / Input->WindowHeight;
+
     float Aspect = (float) Input->WindowWidth / Input->WindowHeight;
-    float HalfHeight = 100;
-    float HalfDepth = 100 * HalfHeight;
-    mat4 Projection = glm::ortho(
-        -HalfHeight * Aspect, HalfHeight * Aspect, // left, right
-        -HalfHeight, HalfHeight, // bottom, top
-        0.0f, 2*HalfDepth // near, far
+    float Distance = 400;
+    mat4 Projection = glm::perspective(
+        30.0f, Aspect, // fov, aspect
+        0.1f, 2*Distance // near, far
     );
+
+    Projection = glm::translate(vec3(-ClipSpaceLeft, ClipSpaceUp, 0.0f)) * Projection;
 
     float Yaw = -State->CamPos.x * 360;
     float Pitch = State->CamPos.y * 180;
@@ -253,7 +369,8 @@ DAIS_UPDATE_AND_RENDER(GameUpdate) {
 
     vec3 LookCenter = Skel.WorldMatrices[2] *
             vec4(Skel.WorldSetupMatrices[3][3], 1.0f);
-    vec3 LookSource = LookCenter - LookDirection * HalfDepth;
+    LookCenter.y -= 15;
+    vec3 LookSource = LookCenter - LookDirection * Distance;
 
     mat4 View = glm::lookAt(
         LookSource,
@@ -273,15 +390,22 @@ DAIS_UPDATE_AND_RENDER(GameUpdate) {
     glEnable(GL_DEPTH_TEST);
     glEnable(GL_CULL_FACE);
 
-    glEnable(GL_BLEND);
-    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-    RenderGrid(State->ShaderState, &State->Grid, vec2(LookCenter.x, LookCenter.z), 5, Combined);
-    glDisable(GL_BLEND);
+    if (State->RenderGrid) {
+        glEnable(GL_BLEND);
+        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+        RenderGrid(State->ShaderState, &State->Grid, vec2(LookCenter.x, LookCenter.z), 5, Combined);
+        glDisable(GL_BLEND);
+    }
 
     RenderSkinnedMesh(State->ShaderState, State->SkinnedMesh, &Skel, Combined);
-    glDisable(GL_DEPTH_TEST);
-    RenderBones(State->ShaderState, &Skel, Combined);
+
+    if (State->RenderSkeleton) {
+        glDisable(GL_DEPTH_TEST);
+        RenderBones(State->ShaderState, &Skel, Combined);
+    }
+
     PERF_END(Rendering);
+
 
     // ---------- Cleanup -----------
 

@@ -49,6 +49,34 @@
 #define DAIS_INUSE dais_inuse.so
 #endif
 
+// These colors taken from https://sashat.me/2017/01/11/list-of-20-simple-distinct-colors/
+const u32 DebugColors[] = {
+    // in RGBA form
+    0xe6194bff, // reddish
+    0x3cb44bff, // green
+    0xffe119ff, // yellow
+    0x4363d8ff, // blue
+    0xf58231ff, // orange
+    0x911eb4ff, // purple
+    0x42d4f4ff, // cyan
+    0xf032e6ff, // magenta
+    0xbfef45ff, // lime
+    0xfabebeff, // pink
+    0x469990ff, // lavender
+    0x9a6324ff, // brown
+    0xfffac8ff, // beige
+    0x800000ff, // maroon
+    0xaaffc3ff, // mint
+    0x808000ff, // olive
+    0xffd8b1ff, // apricot
+    0x000075ff, // navy
+    0xa9a9a9ff, // gray
+    0xffffffff, // white
+    0x000000ff  // black
+};
+
+
+
 
 // ---------------- Derivative Macros ------------------
 
@@ -370,10 +398,14 @@ dais_input FrameInput;
 dais_input PlaybackInput;
 
 static
-void GlfwResizeCallback(GLFWwindow *window, int width, int height) {
-    glViewport(0, 0, width, height);
+void GlfwWindowSizeCallback(GLFWwindow *window, int width, int height) {
     FrameInput.WindowWidth = width;
     FrameInput.WindowHeight = height;
+}
+
+static
+void GlfwFramebufferSizeCallback(GLFWwindow *window, int width, int height) {
+    glViewport(0, 0, width, height);
 }
 
 static
@@ -613,7 +645,8 @@ int main(int argc, char **argv) {
         return -1;
     }
 
-    glfwSetFramebufferSizeCallback(Window, GlfwResizeCallback);
+    glfwSetWindowSizeCallback(Window, GlfwWindowSizeCallback);
+    glfwSetFramebufferSizeCallback(Window, GlfwFramebufferSizeCallback);
     glfwSetKeyCallback(Window, GlfwKeyCallback);
     glfwSetCursorPosCallback(Window, GlfwCursorPosCallback);
     glfwSetMouseButtonCallback(Window, GlfwClickCallback);
@@ -677,7 +710,14 @@ int main(int argc, char **argv) {
     u64 LastPerfReport = GameStartTime;
     u32 PerfFrames = 0;
 
-    glfwGetWindowSize(Window, &FrameInput.WindowWidth, &FrameInput.WindowHeight);
+    {
+        // seed resize callbacks with inital size
+        int Width, Height;
+        glfwGetWindowSize(Window, &Width, &Height);
+        GlfwWindowSizeCallback(Window, Width, Height);
+        glfwGetFramebufferSize(Window, &Width, &Height);
+        GlfwFramebufferSizeCallback(Window, Width, Height);
+    }
 
     while (Platform.ContinueRunning && !glfwWindowShouldClose(Window)) {
         u64 DylibLastModified = GetLastModifiedTime(DAIS_TARGET_STR);

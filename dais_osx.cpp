@@ -410,6 +410,20 @@ void GlfwFramebufferSizeCallback(GLFWwindow *window, int width, int height) {
 
 static
 void GlfwKeyCallback(GLFWwindow* window, int key, int scancode, int action, int mods) {
+    ImGuiIO& io = ImGui::GetIO();
+    if (action == GLFW_PRESS)
+        io.KeysDown[key] = true;
+    if (action == GLFW_RELEASE)
+        io.KeysDown[key] = false;
+
+    (void)mods; // Modifiers are not reliable across systems
+    io.KeyCtrl = io.KeysDown[GLFW_KEY_LEFT_CONTROL] || io.KeysDown[GLFW_KEY_RIGHT_CONTROL];
+    io.KeyShift = io.KeysDown[GLFW_KEY_LEFT_SHIFT] || io.KeysDown[GLFW_KEY_RIGHT_SHIFT];
+    io.KeyAlt = io.KeysDown[GLFW_KEY_LEFT_ALT] || io.KeysDown[GLFW_KEY_RIGHT_ALT];
+    io.KeySuper = io.KeysDown[GLFW_KEY_LEFT_SUPER] || io.KeysDown[GLFW_KEY_RIGHT_SUPER];
+
+    if (io.WantCaptureKeyboard) return;
+
     if (action == GLFW_PRESS) {
         if (key == GLFW_KEY_ESCAPE) {
             glfwSetWindowShouldClose(window, true);
@@ -453,11 +467,36 @@ void GlfwCursorPosCallback(GLFWwindow *window, double xPos, double yPos) {
 
 static
 void GlfwClickCallback(GLFWwindow *window, int button, int action, int mods) {
+    ImGui_ImplGlfw_MouseButtonCallback(window, button, action, mods);
     if (button < ElementCount(FrameInput.MouseButtons)) {
         FrameInput.MouseButtons[button].ModCount++;
         FrameInput.MouseButtons[button].Pressed = (action == GLFW_PRESS);
     }
 }
+
+static
+void GlfwScrollCallback(GLFWwindow *window, double xOffset, double yOffset) {
+    // scrolling is kind of fast, slow it down with this.
+    // TODO: this value is probably related to the
+    // display density. Do some digging and see
+    // what feels good
+    float ScrollScalar = 0.5f;
+    ImGuiIO& io = ImGui::GetIO();
+    io.MouseWheelH += (float)xOffset * ScrollScalar;
+    io.MouseWheel += (float)yOffset * ScrollScalar * 0.2f;
+    // The *0.2 above counteracts a *5 inside of ImGui.
+    // I'm not sure why it's there, but it causes vertical
+    // scrolling to be 5x faster than horizontal, which is
+    // not fun to use.
+}
+
+static
+void GlfwCharCallback(GLFWwindow*, unsigned int c) {
+    ImGuiIO& io = ImGui::GetIO();
+    if (c > 0 && c < 0x10000)
+        io.AddInputCharacter((unsigned short)c);
+}
+
 
 static
 void GlfwErrorCallback(int error, const char* description) {
@@ -601,14 +640,11 @@ dais_input *PreProcessInput() {
     return InputToUse;
 }
 
-void StartImguiFrame(dais_input *Input) {
+void StartImguiFrame() {
     // Start the Dear ImGui frame
     ImGui_ImplOpenGL3_NewFrame();
     ImGui_ImplGlfw_NewFrame();
     ImGui::NewFrame();
-
-    // TODO: copy input into imgui io
-    ImGuiIO &io = ImGui::GetIO();
 }
 
 int main(int argc, char **argv) {
@@ -648,8 +684,10 @@ int main(int argc, char **argv) {
     glfwSetWindowSizeCallback(Window, GlfwWindowSizeCallback);
     glfwSetFramebufferSizeCallback(Window, GlfwFramebufferSizeCallback);
     glfwSetKeyCallback(Window, GlfwKeyCallback);
+    glfwSetCharCallback(Window, GlfwCharCallback);
     glfwSetCursorPosCallback(Window, GlfwCursorPosCallback);
     glfwSetMouseButtonCallback(Window, GlfwClickCallback);
+    glfwSetScrollCallback(Window, GlfwScrollCallback);
 
     glfwMakeContextCurrent(Window);
 
@@ -738,11 +776,18 @@ int main(int argc, char **argv) {
         FrameInput.FrameDeltaMS = (u32) (FrameTime - LastFrameTime);
         FrameInput.FrameDeltaSec = FrameInput.FrameDeltaMS * 0.001f;
 
-        glfwPollEvents(); // this will call our callbacks and fill in FrameInput.
+        // call our input callbacks from GLFW
+        // ideally we would do this after StartImguiFrame
+        // so that we could update WantCapture*
+        // but we need to set up inputs first
+        // so this needs to come before.
+        // This causes an extra frame of lag
+        // which hopefully isn't so bad.
+        glfwPollEvents();
+
+        StartImguiFrame();
 
         dais_input *InputToUse = PreProcessInput();
-
-        StartImguiFrame(InputToUse);
 
         Target.UpdateAndRender(&Platform, InputToUse);
 

@@ -15,8 +15,8 @@
 #include <glm/gtx/rotate_vector.hpp>
 #include <glm/gtc/quaternion.hpp>
 
-#include "imgui/imgui.h"
-#include "imgui/imgui_demo.cpp"
+#include "../imgui/imgui.h"
+#include "../imgui/imgui_demo.cpp"
 
 using glm::vec2;
 using glm::vec3;
@@ -31,7 +31,7 @@ using glm::mat4x3;
 
 #include "dais.h"
 #include "dais_render.h"
-#include "arena.cpp"
+#include "../shared/arena.cpp"
 
 // -------- Constants --------
 
@@ -171,6 +171,7 @@ DAIS_UPDATE_AND_RENDER(GameUpdate) {
 
 
     // ---------- ImGUI ----------
+
     PERF_STAT(ImGUI);
 
     if (State->ShowImguiTestWindow) {
@@ -404,6 +405,7 @@ DAIS_UPDATE_AND_RENDER(GameUpdate) {
 
     PERF_END(Rendering);
 
+    printf("hotwsap test\n");
 
     // ---------- Cleanup -----------
 
@@ -424,5 +426,5 @@ DAIS_UPDATE_AND_RENDER(GameUpdate) {
     }
     ArenaClear(&State->TempArena);
     PERF_END(Cleanup);
-}
 
+}

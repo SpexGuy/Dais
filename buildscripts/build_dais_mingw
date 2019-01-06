@@ -1,0 +1,46 @@
+#!/bin/bash
+
+# This file should always be invoked from
+# the project root directory, usually by
+# the build_dais script.
+
+rm -rf build/
+mkdir build
+
+if [ ! -f bin/mingw/libimgui.a ]; then
+    echo "Building Imgui..."
+    if [ ! -d bin ]; then mkdir bin; fi
+    if [ ! -d bin/mingw ]; then mkdir bin/mingw; fi
+    source buildscripts/build_imgui_mingw
+fi
+
+cp bin/mingw/libimgui.a build/
+
+echo "Building Dais..."
+g++ -Wl,-Bstatic \
+    -Iinclude \
+    -Llib/mingw \
+    -Lbuild \
+    -DIMGUI_IMPL_OPENGL_LOADER_GLAD \
+    -DDAIS_MINGW \
+    -DDAIS_BASE_ADDRESS=0x10000000UL \
+    platform/win32_mman.c \
+    platform/dais_mingw.cpp \
+    imgui/imgui_impl_opengl3.cpp \
+    imgui/imgui_impl_glfw.cpp \
+    include/glad/glad.c \
+    -static \
+    -static-libstdc++ \
+    -o build/dais \
+    -limgui -lglfw3 -lopengl32 -lglu32 -lgdi32
+
+# Gcc does this thing called "as-needed" linking
+# which means that if you put -l<library> before the .cpp
+# file that needs it, the library is ignored because it
+# doesn't look like it's needed yet.  Even with --verbose,
+# ld doesn't say anything about this, causing one of the
+# most difficult to debug symbol-not-found errors I've seen
+# in several years.  The -l flags must come at the end.
+
+echo "Building Game..."
+source buildscripts/build_game_mingw

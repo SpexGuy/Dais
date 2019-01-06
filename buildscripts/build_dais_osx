@@ -1,0 +1,32 @@
+#!/bin/bash
+
+# This file should always be invoked from
+# the project root directory, usually by
+# the build_dais script.
+
+rm -rf build/
+mkdir build
+
+if [ ! -f bin/osx/libimgui.so ]; then
+    if [ ! -d bin ]; then mkdir bin; fi
+    if [ ! -d bin/osx ]; then mkdir bin/osx; fi
+    source build_imgui
+fi
+
+cp bin/osx/libimgui.so build/
+
+g++ -Iinclude \
+    -Lbuild/ -limgui \
+    -Llib/osx -lglfw3 \
+    -framework Cocoa \
+    -framework OpenGL \
+    -framework IOKit \
+    -framework CoreVideo \
+    -DIMGUI_IMPL_OPENGL_LOADER_GLAD \
+    platform/dais_osx.cpp \
+    imgui/imgui_impl_opengl3.cpp \
+    imgui/imgui_impl_glfw.cpp \
+    include/glad/glad.c \
+    -o build/dais
+
+source buildscripts/build_game_osx

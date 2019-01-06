@@ -1,0 +1,10 @@
+#!/bin/bash
+
+g++ -Iinclude \
+    -Llib/mingw \
+    -Lbin/mingw \
+    -limgui \
+    game/game.cpp \
+    include/glad/glad.c \
+    -shared \
+    -o build/libgame.so

@@ -1,0 +1,7 @@
+#!/bin/bash
+
+# This file should always be invoked from
+# the project root directory
+
+g++ imgui/mingw_build.cpp -shared -o libimgui.a
+mv libimgui.a bin/mingw/libimgui.a

@@ -1,12 +1,9 @@
 #!/bin/bash
 
-g++ -Iinclude \
-    -Llib/osx \
-    -Lbin/osx \
-    -limgui \
-    -framework OpenGL \
-    -fPIC \
-    game.cpp \
-    include/glad/glad.c \
-    -shared \
-    -o build/libgame.so
+if [[ "$OSTYPE" == "msys" ]]; then
+	source buildscripts/build_game_mingw
+elif [[ "$OSTYPE" == "darwin"* ]]; then
+	source buildscripts/build_game_osx
+else
+	echo "Unknown build for platform" "$OSTYPE"
+fi

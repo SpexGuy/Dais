@@ -1,27 +1,9 @@
 #!/bin/bash
 
-rm -rf build/
-mkdir build
-
-if [ ! -f bin/osx/libimgui.so ]; then
-    source build_imgui
+if [[ "$OSTYPE" == "msys" ]]; then
+	source buildscripts/build_dais_mingw
+elif [[ "$OSTYPE" == "darwin"* ]]; then
+	source buildscripts/build_dais_osx
+else
+	echo "Unknown build for platform" "$OSTYPE"
 fi
-
-cp bin/osx/libimgui.so build/
-
-g++ -Iinclude \
-    -Lbuild/ -limgui \
-    -Llib/osx -lglfw3 \
-    -framework Cocoa \
-    -framework OpenGL \
-    -framework IOKit \
-    -framework CoreVideo \
-    -DIMGUI_IMPL_OPENGL_LOADER_GLAD \
-    dais_osx.cpp \
-    imgui/imgui_impl_opengl3.cpp \
-    imgui/imgui_impl_glfw.cpp \
-    include/glad/glad.c \
-    -o build/dais
-
-source hotswap
-

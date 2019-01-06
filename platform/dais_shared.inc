@@ -1,107 +1,3 @@
-#include "dais.h"
-
-#include <stdio.h>
-#include <string.h> // strerror
-
-#include <mach/mach_init.h>
-#include <mach/mach_time.h> // mach_absolute_time, for accurate monotonic time
-#include <sys/dir.h> // opendir et al
-#include <sys/mman.h> // mmap
-#include <sys/time.h> // gettimeofday, for system time
-#include <sys/types.h> // struct dirent
-#include <sys/stat.h>
-#include <errno.h>
-#include <time.h> // clock, for cpu time
-#include <copyfile.h>
-#include <dlfcn.h>
-#include <unistd.h>
-#include <fcntl.h>
-
-#include <glad/glad.h>
-#include <GLFW/glfw3.h>
-
-#include "imgui/imgui.h"
-#include "imgui/imgui_impl_glfw.h"
-#include "imgui/imgui_impl_opengl3.h"
-
-#include "arena.cpp"
-
-
-// ---------------- Compile-time Config ----------------
-
-#ifndef DAIS_BASE_ADDRESS
-#define DAIS_BASE_ADDRESS 0x400000000UL
-#endif
-
-#ifndef DAIS_MEM_SIZE
-#define DAIS_MEM_SIZE Gigabytes(1)
-#endif
-
-#ifndef DAIS_TARGET
-#define DAIS_TARGET libgame.so
-#endif
-
-#ifndef DAIS_UPDATE_FUNC
-#define DAIS_UPDATE_FUNC GameUpdate
-#endif
-
-#ifndef DAIS_INUSE
-#define DAIS_INUSE dais_inuse.so
-#endif
-
-// These colors taken from https://sashat.me/2017/01/11/list-of-20-simple-distinct-colors/
-const u32 DebugColors[] = {
-    // in RGBA form
-    0xe6194bff, // reddish
-    0x3cb44bff, // green
-    0xffe119ff, // yellow
-    0x4363d8ff, // blue
-    0xf58231ff, // orange
-    0x911eb4ff, // purple
-    0x42d4f4ff, // cyan
-    0xf032e6ff, // magenta
-    0xbfef45ff, // lime
-    0xfabebeff, // pink
-    0x469990ff, // lavender
-    0x9a6324ff, // brown
-    0xfffac8ff, // beige
-    0x800000ff, // maroon
-    0xaaffc3ff, // mint
-    0x808000ff, // olive
-    0xffd8b1ff, // apricot
-    0x000075ff, // navy
-    0xa9a9a9ff, // gray
-    0xffffffff, // white
-    0x000000ff  // black
-};
-
-
-
-
-// ---------------- Derivative Macros ------------------
-
-#define STRINGIZE(x) #x
-#define STRINGIZE_VALUE(x) STRINGIZE(x)
-
-#define DAIS_TARGET_STR STRINGIZE_VALUE(DAIS_TARGET)
-#define DAIS_INUSE_STR  STRINGIZE_VALUE(DAIS_INUSE)
-#define DAIS_UPDATE_FUNC_STR STRINGIZE_VALUE(DAIS_UPDATE_FUNC)
-
-
-#define RECORD_NONE 0
-#define RECORD_WRITE 1
-#define RECORD_READ 2
-struct recording_state {
-    int State;
-    int File;
-    int Advance;
-};
-
-dais Platform;
-
-recording_state RecordingState;
-
-GLFWwindow *Window;
 
 
 // ----------------- Perf ----------------
@@ -118,7 +14,7 @@ u64 StatTimes[MAX_PERF_STATS];
 u64 StatMax[MAX_PERF_STATS];
 u32 StatCounts[MAX_PERF_STATS];
 
-DAIS_SUBMIT_STAT(OSXPerfStat) {
+DAIS_SUBMIT_STAT(SubmitPerfStat) {
     u32 Index;
     for (Index = 0; Index < UsedPerfStats; Index++) {
         // assume strings are reference equal, since they are the same point in code.
@@ -183,6 +79,21 @@ void PrintPerfReport(u32 NumFrames) {
     }
 }
 
+#define RECORD_NONE 0
+#define RECORD_WRITE 1
+#define RECORD_READ 2
+struct recording_state {
+    int State;
+    int File;
+    int Advance;
+};
+
+dais Platform;
+
+recording_state RecordingState;
+
+GLFWwindow *Window;
+
 
 // ----------------- Files ----------------
 
@@ -206,17 +117,7 @@ void PrintErrno() {
 }
 
 static
-u64 GetLastModifiedTime(const char *Filename) {
-    u64 LastWrite = 0;
-    struct stat Stats;
-    if (stat(Filename, &Stats) == 0) {
-        LastWrite = Stats.st_mtimespec.tv_sec;
-    }
-    return LastWrite;
-}
-
-static
-DAIS_LOAD_FILE_BUFFER(OSXLoadFileBuffer) {
+DAIS_LOAD_FILE_BUFFER(LoadFileBuffer) {
     dais_file File = {};
 
     File.Handle = DAIS_BAD_FILE;
@@ -225,12 +126,12 @@ DAIS_LOAD_FILE_BUFFER(OSXLoadFileBuffer) {
 }
 
 static
-DAIS_FREE_FILE_BUFFER(OSXFreeFileBuffer) {
+DAIS_FREE_FILE_BUFFER(FreeFileBuffer) {
 
 }
 
 static
-DAIS_LOAD_FILE_BUFFER(OSXMapReadOnlyFile) {
+DAIS_LOAD_FILE_BUFFER(MapReadOnlyFile) {
     dais_file File = {};
 
     File.Handle = DAIS_BAD_FILE;
@@ -279,7 +180,7 @@ DAIS_LOAD_FILE_BUFFER(OSXMapReadOnlyFile) {
     return File;
 }
 
-DAIS_FREE_FILE_BUFFER(OSXUnmapReadOnlyFile) {
+DAIS_FREE_FILE_BUFFER(UnmapReadOnlyFile) {
     // find the file metadata
     mapped_file **Curr = &FileState.MappedFiles;
     while (*Curr) {
@@ -307,7 +208,7 @@ bool KeepListEntry(char *Filename) {
             strcmp(Filename, "..") != 0;
 }
 
-DAIS_LIST_DIRECTORY(OSXListDirectory) {
+DAIS_LIST_DIRECTORY(ListDirectory) {
     dais_listing Result = {};
     Result.Count = -1;
 
@@ -356,39 +257,6 @@ DAIS_LIST_DIRECTORY(OSXListDirectory) {
     }
 
     return Result;
-}
-
-
-// ----------------- Timing ----------------
-
-static mach_timebase_info_data_t Timebase = {};
-
-static
-u64 OSXSystemTime() {
-    u64 Now = 0;
-    struct timeval Tv = {};
-    gettimeofday(&Tv, 0);
-    Now = Tv.tv_sec * 1000UL + Tv.tv_usec / 1000UL;
-    return Now;
-}
-
-static
-u64 OSXNanoTime() {
-    u64 Raw = mach_absolute_time();
-    u64 Now = Raw * (u64) Timebase.numer / (u64) Timebase.denom;
-    return Now;
-}
-
-static
-u64 OSXMilliTime() {
-    u64 Now = OSXNanoTime() / 1000000UL;
-    return Now;
-}
-
-static
-u64 OSXNanoClock() {
-    u64 Now = clock() * (1000000000UL / CLOCKS_PER_SEC);
-    return Now;
 }
 
 
@@ -497,60 +365,13 @@ void GlfwCharCallback(GLFWwindow*, unsigned int c) {
         io.AddInputCharacter((unsigned short)c);
 }
 
-
 static
 void GlfwErrorCallback(int error, const char* description) {
     printf("GLFW Error: %s (error %d)\n", description, error);
 }
 
 
-
-// ----------------- Main ----------------
-
-typedef int glad_loader_init(GLADloadproc LoadProc);
-
-struct target_dylib {
-    u64 LastModified;
-    void *Handle;
-    dais_update_and_render *UpdateAndRender;
-};
-
-static
-DAIS_UPDATE_AND_RENDER(StubUpdateAndRender) {
-}
-
-static inline
-void UpdateTarget(target_dylib *Target) {
-    if (Target->Handle) {
-        dlclose(Target->Handle);
-    }
-
-    copyfile(DAIS_TARGET_STR, DAIS_INUSE_STR, 0, COPYFILE_ALL);
-
-    Target->LastModified = GetLastModifiedTime(DAIS_INUSE_STR);
-    Target->Handle = dlopen(DAIS_INUSE_STR, RTLD_LOCAL|RTLD_LAZY);
-    Target->UpdateAndRender = 0;
-    if (Target->Handle) {
-        Target->UpdateAndRender = (dais_update_and_render *)
-                dlsym(Target->Handle, DAIS_UPDATE_FUNC_STR);
-        glad_loader_init *GladInit = (glad_loader_init *)
-                dlsym(Target->Handle, "gladLoadGLLoader");
-        if (GladInit) {
-            if (!GladInit((GLADloadproc) glfwGetProcAddress)) {
-                printf("WARNING: Couldn't init GLAD loader in new dll\n");
-            }
-        } else {
-            printf("WARNING: GLAD loader not found in new dll\n");
-        }
-    }
-
-    if (!Target->UpdateAndRender) {
-        Target->UpdateAndRender = StubUpdateAndRender;
-        printf("WARNING: Couldn't load target %s\n", DAIS_TARGET_STR);
-    } else {
-        printf("INFO: Updating Game Code\n");
-    }
-}
+// ----------------- Input Recording ----------------
 
 static inline
 void StartRecording() {
@@ -640,6 +461,12 @@ dais_input *PreProcessInput() {
     return InputToUse;
 }
 
+
+
+
+
+
+
 void StartImguiFrame() {
     // Start the Dear ImGui frame
     ImGui_ImplOpenGL3_NewFrame();
@@ -675,10 +502,11 @@ int main(int argc, char **argv) {
     // glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 0);
     // glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);
     // glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
+
     Window = glfwCreateWindow(640, 480, "Dais Window", NULL, NULL);
     if (!Window) {
         printf("FATAL: Could not create window.\n");
-        return -1;
+        exit(-1);
     }
 
     glfwSetWindowSizeCallback(Window, GlfwWindowSizeCallback);
@@ -697,10 +525,11 @@ int main(int argc, char **argv) {
     }
     printf("OpenGL %d.%d\n", GLVersion.major, GLVersion.minor);
     printf("OpenGL version recieved: %s\n", glGetString(GL_VERSION));
+    fflush(stdout);
 
     glfwSwapInterval(1);
 
-    mach_timebase_info(&Timebase);
+    PCALL(TimerInit)();
 
     // Setup Dear ImGui binding
     IMGUI_CHECKVERSION();
@@ -717,33 +546,28 @@ int main(int argc, char **argv) {
 
     Platform.Initialized = false;
     Platform.MemorySize = DAIS_MEM_SIZE;
-    Platform.Memory = (char *) mmap((void *)DAIS_BASE_ADDRESS,
-                        Platform.MemorySize,
-                        PROT_READ | PROT_WRITE,
-                        MAP_ANON | MAP_SHARED,
-                        -1,
-                        0);
+    Platform.Memory = (char *) PCALL(ReserveMemPages)((void *)DAIS_BASE_ADDRESS, Platform.MemorySize);
 
     if (!Platform.Memory) {
         int err = errno;
-        printf("FATAL: Could not allocate 0x%llX bytes at address %p, error=%d (%s)\n", Platform.MemorySize, Platform.Memory, err, strerror(err));
-        return -1;
+        printf("FATAL: Could not allocate 0x%llX bytes at address %p, error=%d (%s)\n", Platform.MemorySize, (void *)DAIS_BASE_ADDRESS, err, strerror(err));
+        exit(-1);
     }
 
-    Platform.LoadFileBuffer = OSXLoadFileBuffer;
-    Platform.FreeFileBuffer = OSXFreeFileBuffer;
-    Platform.MapReadOnlyFile = OSXMapReadOnlyFile;
-    Platform.UnmapReadOnlyFile = OSXUnmapReadOnlyFile;
-    Platform.ListDirectory = OSXListDirectory;
-    Platform.ReadPerformanceCounter = OSXNanoTime;
-    Platform.SubmitPerfStat = OSXPerfStat;
+    Platform.LoadFileBuffer = LoadFileBuffer;
+    Platform.FreeFileBuffer = FreeFileBuffer;
+    Platform.MapReadOnlyFile = MapReadOnlyFile;
+    Platform.UnmapReadOnlyFile = UnmapReadOnlyFile;
+    Platform.ListDirectory = ListDirectory;
+    Platform.ReadPerformanceCounter = PCALL(NanoTime);
+    Platform.SubmitPerfStat = SubmitPerfStat;
 
     Platform.ContinueRunning = true;
 
     target_dylib Target = {};
     Target.LastModified = 1;
 
-    u64 GameStartTime = OSXMilliTime();
+    u64 GameStartTime = PCALL(MilliTime)();
     u64 LastFrameTime = GameStartTime;
     u64 LastPerfReport = GameStartTime;
     u32 PerfFrames = 0;
@@ -758,20 +582,20 @@ int main(int argc, char **argv) {
     }
 
     while (Platform.ContinueRunning && !glfwWindowShouldClose(Window)) {
-        u64 DylibLastModified = GetLastModifiedTime(DAIS_TARGET_STR);
-        if (DylibLastModified != 0 && DylibLastModified != Target.LastModified) {
-            UpdateTarget(&Target);
+        u64 DylibLastModified = PCALL(GetLastModifiedTime)(DAIS_TARGET_STR);
+        if (Target.LastModified == 1 || (DylibLastModified != 0 && DylibLastModified != Target.LastModified)) {
+            PCALL(UpdateTarget)(&Target);
             Platform.JustReloaded = true;
             ClearPerfStats();
             PerfFrames = 0;
-            LastPerfReport = OSXMilliTime();
+            LastPerfReport = PCALL(MilliTime)();
         } else {
             Platform.JustReloaded = false;
         }
 
-        u64 FrameTime = OSXMilliTime();
+        u64 FrameTime = PCALL(MilliTime)();
 
-        FrameInput.SystemTimeMS = OSXSystemTime();
+        FrameInput.SystemTimeMS = PCALL(SystemTime)();
         FrameInput.UpTimeMS = FrameTime - GameStartTime;
         FrameInput.FrameDeltaMS = (u32) (FrameTime - LastFrameTime);
         FrameInput.FrameDeltaSec = FrameInput.FrameDeltaMS * 0.001f;
@@ -814,6 +638,8 @@ int main(int argc, char **argv) {
             PrintPerfReport(PerfFrames);
             PerfFrames = 0;
         }
+
+        fflush(stdout);
 
         LastFrameTime = FrameTime;
     }

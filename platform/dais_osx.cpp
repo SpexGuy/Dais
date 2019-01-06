@@ -75,12 +75,14 @@ u64 OSXGetLastModifiedTime(const char *Filename) {
 
 static
 void *OSXReserveMemPages(void *RequestedAddress, u64 SizeBytes) {
-    mmap(RequestedAddress,
+    void *Result = mmap(RequestedAddress,
          SizeBytes,
          PROT_READ | PROT_WRITE,
          MAP_ANON | MAP_SHARED,
          -1,
          0);
+    if (Result == MAP_FAILED) Result = 0;
+    return Result;
 }
 
 

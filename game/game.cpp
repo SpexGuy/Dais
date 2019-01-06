@@ -405,8 +405,6 @@ DAIS_UPDATE_AND_RENDER(GameUpdate) {
 
     PERF_END(Rendering);
 
-    printf("hotwsap test\n");
-
     // ---------- Cleanup -----------
 
     PERF_STAT(Cleanup);

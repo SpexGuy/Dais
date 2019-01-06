@@ -1,0 +1,8 @@
+./import -s RawMocapData/DefaultAvatar.fbx RawMocapData/mapping.mp
+
+pushd RawMocapData/Animations
+find . -name "*.fbx" | xargs -I {} -L 1 ../../import -a {} ../mapping.mp
+rm -rf Built/
+mkdir Built/
+find . -name *.ska | xargs -I {} mv {} Built/
+popd

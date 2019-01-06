@@ -1,0 +1,2 @@
+cp RawMocapData/DefaultAvatar.skm ../dais/Avatar
+cp RawMocapData/Animations/Built/* ../dais/Avatar/Animations/
